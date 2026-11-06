@@ -236,14 +236,14 @@ td.num{white-space:nowrap}
       <label>Data repo<input id="sRepo" type="text" autocomplete="off" spellcheck="false"></label>
       <label>Branch<input id="sBranch" type="text" autocomplete="off" spellcheck="false"></label>
       <span></span>
-      <label class="full">GitHub token<input id="sToken" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…"></label>
+      <label class="full">GitHub token<input id="sToken" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore spellcheck="false" placeholder="github_pat_…"></label>
       <details class="full note"><summary>How to make the GitHub token</summary><ol>
         <li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>.</li>
         <li>Name it “F-350 Service Log” and pick an expiration (up to a year, or none).</li>
         <li>Under <b>Repository access</b>, choose <b>Only select repositories</b> and pick your data repo.</li>
         <li>Under <b>Permissions → Repository permissions</b>, set <b>Contents</b> to <b>Read and write</b>.</li>
         <li>Click <b>Generate token</b>, copy it, and paste it above.</li></ol></details>
-      <label class="wide">Anthropic API key (optional, for reading receipts)<input id="sAkey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"></label>
+      <label class="wide">Anthropic API key (optional, for reading receipts)<span class="row" style="flex-wrap:nowrap"><input id="sAkey" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore spellcheck="false" placeholder="sk-ant-api03-…" style="flex:1"><button class="btn small" type="button" id="sShowKey">Show</button><button class="btn small" type="button" id="sTestKey">Test key</button></span><span id="sKeyMsg" style="font-weight:500;font-size:13px"></span></label>
       <label class="wide">Claude model<input id="sModel" type="text" autocomplete="off" spellcheck="false"></label>
       <details class="full note"><summary>About the Anthropic key</summary>Create one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a> and add a few dollars of credit. Each receipt read costs roughly a few cents. Without a key, everything else works and you type receipt details by hand.</details>
       <div class="full row"><button class="btn primary" type="submit">Connect</button><button class="btn danger" type="button" id="signOut" hidden>Sign out on this device</button><span class="muted" id="sMsg"></span></div>
@@ -894,7 +894,7 @@ ${keys}` });
       body: JSON.stringify({ model: CFG.model || "claude-sonnet-5-5", max_tokens: 2500, messages: [{ role: "user", content }] }) });
     if (!r.ok) {
       let m = ""; try { m = (await r.json()).error?.message || ""; } catch(e){}
-      throw new Error(r.status === 401 ? "Your Anthropic API key was rejected. Check it in Settings." : r.status === 429 ? "Too many requests right now. Wait a minute and try again." : r.status === 404 ? `Model not found. Change the model name in Settings. (${m})` : `Receipt reading failed: ${m || r.status}`);
+      throw new Error(r.status === 401 ? `Anthropic rejected the API key (${m || "invalid x-api-key"}). Open Settings and use Test key.` : r.status === 429 ? "Too many requests right now. Wait a minute and try again." : r.status === 404 ? `Model not found. Change the model name in Settings. (${m})` : `Receipt reading failed: ${m || r.status}`);
     }
     const out = await r.json();
     const txt = (out.content || []).filter(c => c.type === "text").map(c => c.text).join("");
@@ -1009,6 +1009,7 @@ function openSettings(){
   $("sAkey").value = CFG.akey || "";
   $("sModel").value = CFG.model || "claude-sonnet-5-5";
   $("sMsg").textContent = "";
+  showKeyShape();
   $("signOut").hidden = !CFG.token;
   $("settings").hidden = false; $("settings").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -1018,7 +1019,7 @@ $("setForm").addEventListener("submit", async e => {
   e.preventDefault();
   const prev = CFG;
   CFG = { owner: $("sOwner").value.trim(), repo: $("sRepo").value.trim(), branch: $("sBranch").value.trim() || "main",
-          token: $("sToken").value.trim(), akey: $("sAkey").value.trim(), model: $("sModel").value.trim() || "claude-sonnet-5-5" };
+          token: $("sToken").value.replace(/\s+/g,""), akey: cleanKey($("sAkey").value), model: $("sModel").value.trim() || "claude-sonnet-5-5" };
   $("sMsg").textContent = "Connecting to GitHub…";
   try {
     await loadDb();
@@ -1026,6 +1027,49 @@ $("setForm").addEventListener("submit", async e => {
     $("settings").hidden = true; S.canWrite = true; render(); hydrateThumbs(); toast("Connected to your data repo");
   } catch (err) { CFG = prev; $("sMsg").textContent = err.message; }
 });
+/* Anthropic key checks */
+const cleanKey = k => (k || "").replace(/\s+/g, "").replace(/^["'`]+|["'`]+$/g, "");
+function keyShape(k){
+  if (!k) return { ok: true, msg: "" };
+  if (k.startsWith("sk-ant-admin")) return { ok: false, msg: "This is an Admin key. Receipt reading needs a regular API key (starts with sk-ant-api03-). Create one under API keys, not Admin keys." };
+  if (k.startsWith("github_pat_") || k.startsWith("ghp_")) return { ok: false, msg: "This is your GitHub token, not an Anthropic key. Your browser may have auto-filled it." };
+  if (!k.startsWith("sk-ant-")) return { ok: false, msg: `This doesn't look like an Anthropic key (it starts with “${esc(k.slice(0,6))}…”; real keys start with sk-ant-api03-). Your browser may have auto-filled a saved password.` };
+  if (k.length < 80) return { ok: false, msg: `This key looks cut off (${k.length} characters; real keys are about 108). Copy it again from the Console.` };
+  return { ok: true, msg: "" };
+}
+function showKeyShape(){
+  const k = cleanKey($("sAkey").value), sh = keyShape(k);
+  $("sKeyMsg").style.color = sh.ok ? "var(--muted)" : "var(--over)";
+  $("sKeyMsg").innerHTML = sh.msg || (k ? `Key ends in …${esc(k.slice(-4))} (${k.length} characters)` : "");
+}
+$("sAkey").addEventListener("input", showKeyShape);
+$("sShowKey").addEventListener("click", () => { const i = $("sAkey"); i.type = i.type === "password" ? "text" : "password"; $("sShowKey").textContent = i.type === "password" ? "Show" : "Hide"; });
+$("sTestKey").addEventListener("click", async () => {
+  const k = cleanKey($("sAkey").value); $("sAkey").value = k; showKeyShape();
+  if (!k) { $("sKeyMsg").textContent = "Paste a key first."; return; }
+  if (!keyShape(k).ok) return;
+  const btn = $("sTestKey"); btn.disabled = true; $("sKeyMsg").style.color = "var(--muted)"; $("sKeyMsg").textContent = "Checking with Anthropic…";
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/models?limit=100", { headers: { "x-api-key": k, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" } });
+    let j = {}; try { j = await r.json(); } catch(e){}
+    if (r.status === 401) throw new Error(`Anthropic says this key is invalid (${j.error?.message || "invalid x-api-key"}). It may have been deleted or mistyped. Create a new key and paste it again.`);
+    if (r.status === 403) throw new Error(`Anthropic refused this key: ${j.error?.message || "permission denied"}.`);
+    if (!r.ok) throw new Error(`Anthropic returned ${r.status}: ${j.error?.message || "unknown error"}`);
+    const ids = (j.data || []).map(m => m.id);
+    const want = $("sModel").value.trim() || "claude-sonnet-5-5";
+    let note = "";
+    if (ids.length && !ids.includes(want)) {
+      const pick = ids.find(i => /sonnet/.test(i)) || ids[0];
+      $("sModel").value = pick; note = ` Model “${esc(want)}” isn't available to this key, so I switched it to “${esc(pick)}”.`;
+    }
+    $("sKeyMsg").style.color = "var(--ok)";
+    $("sKeyMsg").innerHTML = `Key works.${note} Click Connect to save it. Make sure the account has credit under Billing.`;
+  } catch (e) {
+    $("sKeyMsg").style.color = "var(--over)";
+    $("sKeyMsg").textContent = e.message === "Failed to fetch" ? "Couldn't reach Anthropic. Check your internet connection, or try with ad blockers off." : e.message;
+  } finally { btn.disabled = false; }
+});
+
 $("signOut").addEventListener("click", () => {
   try { localStorage.removeItem(CFG_KEY); localStorage.removeItem(CACHE_KEY); } catch(e){}
   CFG = {}; DB = null; SHA = null; S.records = []; S.schedule = []; S.odometer = []; S.vehicle = null; S.canWrite = false;
