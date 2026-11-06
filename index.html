@@ -243,7 +243,7 @@ td.num{white-space:nowrap}
         <li>Under <b>Repository access</b>, choose <b>Only select repositories</b> and pick your data repo.</li>
         <li>Under <b>Permissions → Repository permissions</b>, set <b>Contents</b> to <b>Read and write</b>.</li>
         <li>Click <b>Generate token</b>, copy it, and paste it above.</li></ol></details>
-      <label class="wide">Anthropic API key (optional, for reading receipts)<span class="row" style="flex-wrap:nowrap"><input id="sAkey" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore spellcheck="false" placeholder="sk-ant-api03-…" style="flex:1"><button class="btn small" type="button" id="sShowKey">Show</button><button class="btn small" type="button" id="sTestKey">Test key</button></span><span id="sKeyMsg" style="font-weight:500;font-size:13px"></span></label>
+      <label class="wide">Anthropic API key (optional, for reading receipts)<span class="row" style="flex-wrap:nowrap"><input id="sAkey" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore spellcheck="false" placeholder="sk-ant-…" style="flex:1"><button class="btn small" type="button" id="sShowKey">Show</button><button class="btn small" type="button" id="sTestKey">Test key</button></span><span id="sKeyMsg" style="font-weight:500;font-size:13px"></span></label>
       <label class="wide">Claude model<input id="sModel" type="text" autocomplete="off" spellcheck="false"></label>
       <details class="full note"><summary>About the Anthropic key</summary>Create one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a> and add a few dollars of credit. Each receipt read costs roughly a few cents. Without a key, everything else works and you type receipt details by hand.</details>
       <div class="full row"><button class="btn primary" type="submit">Connect</button><button class="btn danger" type="button" id="signOut" hidden>Sign out on this device</button><span class="muted" id="sMsg"></span></div>
@@ -1033,8 +1033,9 @@ function keyShape(k){
   if (!k) return { ok: true, msg: "" };
   if (k.startsWith("sk-ant-admin")) return { ok: false, msg: "This is an Admin key. Receipt reading needs a regular API key (starts with sk-ant-api03-). Create one under API keys, not Admin keys." };
   if (k.startsWith("github_pat_") || k.startsWith("ghp_")) return { ok: false, msg: "This is your GitHub token, not an Anthropic key. Your browser may have auto-filled it." };
-  if (!k.startsWith("sk-ant-")) return { ok: false, msg: `This doesn't look like an Anthropic key (it starts with “${esc(k.slice(0,6))}…”; real keys start with sk-ant-api03-). Your browser may have auto-filled a saved password.` };
-  if (k.length < 80) return { ok: false, msg: `This key looks cut off (${k.length} characters; real keys are about 108). Copy it again from the Console.` };
+  if (!k.startsWith("sk-ant-")) return { ok: false, msg: `This doesn't look like an Anthropic key (it starts with “${esc(k.slice(0,6))}…”; real keys start with sk-ant-). Your browser may have auto-filled a saved password.` };
+  if (k.includes("...") || k.includes("…")) return { ok: false, msg: "This is the shortened key shown in the Console list, not the full key. The full key is shown only once, when you create it. Create a new key and copy it from that popup." };
+  if ((k.startsWith("sk-ant-api03-") && k.length < 90) || k.length < 40) return { ok: false, msg: `This key looks cut off (${k.length} characters). Create a new key and copy it from the popup with its copy button.` };
   return { ok: true, msg: "" };
 }
 function showKeyShape(){
