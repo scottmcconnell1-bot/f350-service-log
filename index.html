@@ -397,10 +397,14 @@ function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clea
 const mode = () => S.vehicle?.mode === "severe" ? "severe" : "normal";
 
 /* ---------- mileage model ---------- */
+// The dash odometer changed on these dates (e.g. module replacement). Readings taken before a change
+// are shifted by its delta so every calculation uses the scale on today's dash.
+const shifts = () => (S.vehicle?.odoShifts || []).filter(x => x && x.date && Number.isFinite(x.delta));
+const dashMiles = (miles, dateStr) => miles == null ? null : miles + shifts().filter(x => dateStr < x.date).reduce((a, x) => a + x.delta, 0);
 function readings(){
   const pts = [];
-  for (const r of S.records) if (r.miles != null && r.date && r.miles > 100 && !r.odoIgnore) pts.push({date: parseD(r.date), miles: r.miles, src: r.shop});
-  for (const o of S.odometer) if (o.miles != null && o.date && !o.ignore) pts.push({date: parseD(o.date), miles: o.miles, src: "Your reading"});
+  for (const r of S.records) if (r.miles != null && r.date && r.miles > 100 && !r.odoIgnore) pts.push({date: parseD(r.date), miles: dashMiles(r.miles, r.date), src: r.shop});
+  for (const o of S.odometer) if (o.miles != null && o.date && !o.ignore) pts.push({date: parseD(o.date), miles: dashMiles(o.miles, o.date), src: "Your reading"});
   pts.sort((a,b) => a.date - b.date || a.miles - b.miles);
   return pts;
 }
@@ -439,7 +443,7 @@ function lastDone(item){
 function evaluate(item, M){
   const iv = item[mode()] || item.normal || {};
   const rec = lastDone(item);
-  const base = rec ? { miles: (rec.miles != null && !rec.odoIgnore) ? rec.miles : (M ? Math.round(M.milesAt(parseD(rec.date))) : 0), est: rec.miles == null || !!rec.odoIgnore, date: parseD(rec.date), rec } : { miles: 0, date: parseD("2013-08-30"), none: true };
+  const base = rec ? { miles: (rec.miles != null && !rec.odoIgnore) ? dashMiles(rec.miles, rec.date) : (M ? Math.round(M.milesAt(parseD(rec.date))) : 0), est: rec.miles == null || !!rec.odoIgnore, date: parseD(rec.date), rec } : { miles: 0, date: parseD("2013-08-30"), none: true };
   const dueMiles = iv.mi ? base.miles + iv.mi : null;
   const dueByTime = iv.mo ? addMonths(base.date, iv.mo) : null;
   const dueByMiles = dueMiles && M ? M.milesToDate(dueMiles) : null;
@@ -570,7 +574,8 @@ function renderUpcoming(M){
   const egrDone = S.records.find(r => r.tags?.includes("egr_cooler"));
   if (egr && egrDone) notes.push(`<b>Ford program 21M04 (EGR cooler):</b> ${esc(egrDone.shop)} replaced the EGR cooler on ${fmtD(parseD(egrDone.date))}. Ask a Ford dealer whether the program is closed for your VIN and whether that repair can be reimbursed.`);
   else if (egr) notes.push(`<b>Open Ford program:</b> 21M04 EGR cooler (issued Jan 2022), with no completion on record. Call a Ford dealer with your VIN.`);
-  if (eng) notes.push(`<b>Engine:</b> long block replaced Jul 2022 at ${fmt(eng.miles)} mi, so the engine itself has about ${M?fmt(M.est-eng.miles):"—"} mi.`);
+  if (eng) notes.push(`<b>Engine:</b> long block replaced Jul 2022 at ${fmt(eng.miles)} mi, so the engine itself has about ${M?fmt(M.est-dashMiles(eng.miles, eng.date)):"—"} mi.`);
+  for (const x of shifts()) notes.push(`<b>Odometer change:</b> on ${fmtD(parseD(x.date))} the dash reading dropped by about ${fmt(-x.delta)} mi${x.note ? ` (${esc(x.note)})` : ""}. Readings from before then are adjusted, so due mileages match your dash today. The truck's actual miles are about ${M?fmt(M.est - x.delta):"—"}.`);
   notes.push(`<b>Tire pressure:</b> Valvoline logged 50/50 psi in Dec 2025 versus 65/80 in Aug 2025. Check the door-jamb placard, since heavy-duty trucks usually run higher pressures.`);
   $("openItems").innerHTML = notes.join("<br>");
 }
@@ -782,10 +787,10 @@ $("odoInput").addEventListener("input", () => { $("odoWarn").hidden = true; });
 /* readings list */
 function renderReadings(){
   const rows = [];
-  for (const r of S.records) if (r.miles != null && r.miles > 100) rows.push({ date: r.date, miles: r.miles, src: r.shop, ign: !!r.odoIgnore, rec: r.id });
-  for (const o of S.odometer) if (o.miles != null) rows.push({ date: o.date, miles: o.miles, src: "Your reading", ign: !!o.ignore, odo: o.id || (o.date + "_" + o.miles) });
+  for (const r of S.records) if (r.miles != null && r.miles > 100) rows.push({ date: r.date, miles: r.miles, dash: dashMiles(r.miles, r.date), src: r.shop, ign: !!r.odoIgnore, rec: r.id });
+  for (const o of S.odometer) if (o.miles != null) rows.push({ date: o.date, miles: o.miles, dash: dashMiles(o.miles, o.date), src: "Your reading", ign: !!o.ignore, odo: o.id || (o.date + "_" + o.miles) });
   rows.sort((a,b) => b.date.localeCompare(a.date) || b.miles - a.miles);
-  $("odoRows").innerHTML = rows.map(x => `<tr class="${x.ign ? "ign" : ""}"><td class="num">${fmtD(parseD(x.date))}</td><td class="num">${fmt(x.miles)}</td><td>${esc(x.src)}${x.ign ? ' <span class="chip">ignored</span>' : ""}</td>
+  $("odoRows").innerHTML = rows.map(x => `<tr class="${x.ign ? "ign" : ""}"><td class="num">${fmtD(parseD(x.date))}</td><td class="num">${fmt(x.miles)}${x.dash !== x.miles && !x.ign ? `<br><span class="muted" style="font-size:12px">≈ ${fmt(x.dash)} on today's dash</span>` : ""}</td><td>${esc(x.src)}${x.ign ? ' <span class="chip">ignored</span>' : ""}</td>
     <td style="white-space:nowrap;text-align:right">${S.canWrite ? (x.rec ? `<button class="btn small" data-rign="${esc(x.rec)}" data-val="${x.ign ? 0 : 1}">${x.ign ? "Use" : "Ignore"}</button>`
       : `<button class="btn small" data-oign="${esc(x.odo)}" data-val="${x.ign ? 0 : 1}">${x.ign ? "Use" : "Ignore"}</button> <button class="btn small danger" data-odel="${esc(x.odo)}">Delete</button>`) : ""}</td></tr>`).join("")
     || `<tr><td colspan="4" class="empty">No readings yet.</td></tr>`;
