@@ -57,7 +57,15 @@ button{cursor:pointer}
 .odo-sub{font-size:13px;color:var(--muted);text-align:right}
 .odo-edit{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .odo-edit input{width:120px}
-@media (max-width:700px){.head{grid-template-columns:1fr}.odo-box{align-items:flex-start}.odo-sub{text-align:left}.odo-edit{justify-content:flex-start}.odo span{font-size:22px}}
+.odo-warn{font-size:13px;color:var(--over);text-align:right;display:flex;flex-direction:column;gap:6px;align-items:flex-end;max-width:420px}
+.odo-warn .row{justify-content:flex-end}
+.rtable{min-width:520px}
+.rtable td{padding:6px 10px}
+.rtable tr.ign td{color:var(--muted)}
+.rtable tr.ign .num{text-decoration:line-through}
+.rwrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.chk{flex-direction:row!important;align-items:center;gap:8px!important;font-weight:500!important;color:var(--ink)!important}
+@media (max-width:700px){.head{grid-template-columns:1fr}.odo-box{align-items:flex-start}.odo-sub{text-align:left}.odo-warn{text-align:left;align-items:flex-start}.odo-warn .row{justify-content:flex-start}.odo-edit{justify-content:flex-start}.odo span{font-size:22px}}
 
 /* controls */
 input[type=text],input[type=password],input[type=number],input[type=date],input[type=search],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 10px;min-width:0}
@@ -189,7 +197,9 @@ td.num{white-space:nowrap}
       <div class="odo-edit" id="odoEdit" hidden>
         <input type="number" id="odoInput" inputmode="numeric" placeholder="Actual miles" aria-label="Current odometer reading">
         <button class="btn small primary" id="odoSave">Save reading</button>
+        <button class="btn small" id="odoList" type="button">All readings</button>
       </div>
+      <div class="odo-warn" id="odoWarn" hidden></div>
     </div>
   </header>
 
@@ -211,6 +221,12 @@ td.num{white-space:nowrap}
       <button class="btn primary" id="addBtn" hidden>+ Shop service</button><button class="btn primary" id="diyBtn" hidden>+ DIY job</button><button class="btn" id="settingsBtn" title="Settings" aria-label="Settings">⚙ Settings</button>
     </div>
   </div>
+
+  <section class="panel" id="odoPanel" hidden>
+    <div class="row" style="justify-content:space-between"><h2>Odometer readings</h2><button class="btn small" id="odoClose" type="button">Close</button></div>
+    <p class="muted" style="margin:0;font-size:14px">Every mileage the estimate is built from. If one is wrong, <b>Ignore</b> it: the record stays in your history, but its mileage stops counting toward estimates and due dates. Readings you typed in can be deleted.</p>
+    <div class="rwrap"><table class="rtable"><thead><tr><th>Date</th><th>Miles</th><th>From</th><th></th></tr></thead><tbody id="odoRows"></tbody></table></div>
+  </section>
 
   <section class="panel formcard" id="settings" hidden>
     <div class="row" style="justify-content:space-between"><h2>Settings</h2><button class="btn small" id="sClose" type="button">Close</button></div>
@@ -253,7 +269,7 @@ td.num{white-space:nowrap}
         <div class="seg" id="doneSeg"><button type="button" data-done-by="shop" aria-pressed="true">Shop</button><button type="button" data-done-by="diy" aria-pressed="false">DIY (me)</button></div>
       </div>
       <label>Date<input type="date" id="fDate" required></label>
-      <label>Odometer (mi)<input type="number" id="fMiles" inputmode="numeric"></label>
+      <label>Odometer (mi)<input type="number" id="fMiles" inputmode="numeric"><span class="chk" style="font-size:12px"><input type="checkbox" id="fOdoIgn"> Mileage is wrong; ignore it</span></label>
       <label class="wide"><span id="shopLbl">Shop</span><input type="text" id="fShop" list="shops" placeholder="e.g. Valvoline Instant Oil Change"></label>
       <datalist id="shops"></datalist>
       <label class="wide">Location<input type="text" id="fLoc" placeholder="City, ST"></label>
@@ -342,15 +358,15 @@ const mode = () => S.vehicle?.mode === "severe" ? "severe" : "normal";
 /* ---------- mileage model ---------- */
 function readings(){
   const pts = [];
-  for (const r of S.records) if (r.miles != null && r.date && r.miles > 100) pts.push({date: parseD(r.date), miles: r.miles, src: r.shop});
-  for (const o of S.odometer) if (o.miles != null && o.date) pts.push({date: parseD(o.date), miles: o.miles, src: "Your reading"});
+  for (const r of S.records) if (r.miles != null && r.date && r.miles > 100 && !r.odoIgnore) pts.push({date: parseD(r.date), miles: r.miles, src: r.shop});
+  for (const o of S.odometer) if (o.miles != null && o.date && !o.ignore) pts.push({date: parseD(o.date), miles: o.miles, src: "Your reading"});
   pts.sort((a,b) => a.date - b.date || a.miles - b.miles);
   return pts;
 }
 function model(){
   const pts = readings();
   if (!pts.length) return null;
-  const last = pts.reduce((a,b) => b.miles >= a.miles ? b : a);
+  const last = pts.reduce((a,b) => (b.date > a.date || (+b.date === +a.date && b.miles >= a.miles)) ? b : a);
   const win = pts.filter(p => last.date - p.date <= 730*DAY);
   let rate = null;
   if (win.length >= 3) {
@@ -361,7 +377,13 @@ function model(){
   }
   if (!rate || rate <= 0) { const f = pts[0]; rate = (last.miles - f.miles) / Math.max(1,(last.date - f.date)/DAY); }
   const est = last.miles + rate * Math.max(0, (today - last.date)/DAY);
-  return { last, rate, est, n: pts.length, milesToDate: m => new Date(last.date.getTime() + ((m - last.miles)/rate)*DAY) };
+  const milesAt = d => {
+    let lo = null, hi = null;
+    for (const p of pts) { if (p.date <= d) lo = p; else if (!hi) hi = p; }
+    if (lo && hi && hi.date > lo.date) return lo.miles + (hi.miles - lo.miles) * ((d - lo.date)/(hi.date - lo.date));
+    return last.miles + rate * ((d - last.date)/DAY);
+  };
+  return { last, rate, est, pts, n: pts.length, milesAt, milesToDate: m => new Date(last.date.getTime() + ((m - last.miles)/rate)*DAY) };
 }
 
 /* ---------- predictions ---------- */
@@ -369,14 +391,14 @@ function lastDone(item){
   let best = null;
   for (const r of S.records) {
     if (!r.tags?.some(t => item.tags.includes(t))) continue;
-    if (!best || (r.miles ?? 0) > (best.miles ?? 0) || ((r.miles ?? 0) === (best.miles ?? 0) && r.date > best.date)) best = r;
+    if (!best || r.date > best.date || (r.date === best.date && (r.miles ?? 0) > (best.miles ?? 0))) best = r;
   }
   return best;
 }
 function evaluate(item, M){
   const iv = item[mode()] || item.normal || {};
   const rec = lastDone(item);
-  const base = rec ? { miles: rec.miles ?? 0, date: parseD(rec.date), rec } : { miles: 0, date: parseD("2013-08-30"), none: true };
+  const base = rec ? { miles: (rec.miles != null && !rec.odoIgnore) ? rec.miles : (M ? Math.round(M.milesAt(parseD(rec.date))) : 0), est: rec.miles == null || !!rec.odoIgnore, date: parseD(rec.date), rec } : { miles: 0, date: parseD("2013-08-30"), none: true };
   const dueMiles = iv.mi ? base.miles + iv.mi : null;
   const dueByTime = iv.mo ? addMonths(base.date, iv.mo) : null;
   const dueByMiles = dueMiles && M ? M.milesToDate(dueMiles) : null;
@@ -473,7 +495,7 @@ function renderUpcoming(M){
     const label = {over:"Overdue", soon:"Due soon", ok:"OK", unk:"No record"}[e.status];
     const ivTxt = [e.iv.mi ? `${fmt(e.iv.mi)} mi` : null, e.iv.mo ? `${e.iv.mo} mo` : null].filter(Boolean).join(" / ") || "as needed";
     const lastTxt = e.base.none ? `No record on file, counted from new (Aug 2013)` :
-      `Last: ${fmtD(e.base.date)} at <span class="num">${fmt(e.base.miles)}</span> mi · ${esc(e.base.rec.shop)}`;
+      `Last: ${fmtD(e.base.date)} at <span class="num">${e.base.est ? "~" : ""}${fmt(e.base.miles)}</span> mi${e.base.est ? " (estimated)" : ""} · ${esc(e.base.rec.shop)}`;
     let dueTxt = "";
     if (e.dueMiles != null) dueTxt += `Due at <b class="num">${fmt(e.dueMiles)}</b> mi`;
     if (e.dueDate) dueTxt += `${dueTxt?" · ":"Due "}${e.status==="over"?"was due":"≈"} ${fmtD(e.dueDate)}`;
@@ -528,7 +550,7 @@ function renderHistory(){
     const typeLbl = {service:"Service",inspection:"Inspection",title:"Title / registration",damage:"Damage",recall:"Recall / program",event:"Event"}[r.type] || r.type;
     html += `<article class="rec ${esc(r.type)}">
       <div class="d">${hl(fmtD(parseD(r.date)))}</div>
-      <div class="m">${r.miles!=null ? hl(fmt(r.miles))+" mi" : "—"}</div>
+      <div class="m">${r.miles!=null ? (r.odoIgnore ? `<s>${hl(fmt(r.miles))}</s> mi<br><span class="chip" title="This mileage is ignored for estimates">ignored</span>` : hl(fmt(r.miles))+" mi") : "—"}</div>
       <div class="body">
         <div class="shop"><span class="type">${typeLbl}</span> ${r.doneBy==="diy"?'<span class="pill diy">DIY</span>':""} · ${hl(r.shop)} ${r.location?`<small>${hl(r.location)}</small>`:""} ${r.cost!=null?`<span class="num" style="float:right">$${Number(r.cost).toFixed(2)}</span>`:""}</div>
         <ul>${(r.items||[]).map(i=>`<li>${hl(i)}</li>`).join("")}</ul>
@@ -677,13 +699,67 @@ document.querySelectorAll("#modeSeg button").forEach(b => b.addEventListener("cl
   catch(e){ toast(e.message); }
 }));
 
-$("odoSave").addEventListener("click", async () => {
+async function saveReading(v, ignoreHigher){
+  try {
+    $("odoSave").disabled = true;
+    await save(d => {
+      d.odometer = d.odometer || [];
+      if (ignoreHigher) {
+        for (const r of d.records) if (r.miles != null && r.miles > v && !r.odoIgnore) r.odoIgnore = true;
+        for (const o of d.odometer) if (o.miles > v) o.ignore = true;
+      }
+      d.odometer.push({ id: "o" + Date.now().toString(36), date: iso(today), miles: v });
+    }, ignoreHigher ? `Odometer ${v} (ignoring higher readings)` : `Odometer ${v}`);
+    $("odoInput").value = ""; $("odoWarn").hidden = true;
+    toast(ignoreHigher ? "Reading saved; the higher readings are now ignored" : "Odometer reading saved");
+    if (!$("odoPanel").hidden) renderReadings();
+  } catch(e){ toast(e.message); } finally { $("odoSave").disabled = false; }
+}
+$("odoSave").addEventListener("click", () => {
   const v = parseInt($("odoInput").value, 10);
   const M = model();
   if (!v || v < 1000) { toast("Enter the full odometer reading in miles"); return; }
-  if (M && v < M.last.miles) { toast(`That's below the last reading (${fmt(M.last.miles)} mi)`); return; }
-  try { $("odoSave").disabled = true; await save(d => { (d.odometer = d.odometer || []).push({ date: iso(today), miles: v }); }, `Odometer ${v}`); $("odoInput").value=""; toast("Odometer reading saved"); }
-  catch(e){ toast(e.message); } finally { $("odoSave").disabled = false; }
+  if (M && v < M.last.miles) {
+    const higher = M.pts.filter(p => p.miles > v);
+    const list = higher.slice(-3).map(p => `${fmt(p.miles)} mi on ${fmtD(p.date)} (${esc(p.src)})`).join("; ");
+    $("odoWarn").innerHTML = `<span>${fmt(v)} mi is lower than ${higher.length === 1 ? "this reading" : higher.length + " readings"}: ${list}.</span>
+      <span class="muted" style="color:var(--muted)">If your dash is right, those readings were wrong. Save and they'll stop counting toward estimates (records stay in your history).</span>
+      <span class="row"><button class="btn small danger" id="odoForce" type="button">Save and ignore the higher reading${higher.length===1?"":"s"}</button><button class="btn small" id="odoCancel" type="button">Cancel</button></span>`;
+    $("odoWarn").hidden = false;
+    $("odoForce").onclick = () => saveReading(v, true);
+    $("odoCancel").onclick = () => { $("odoWarn").hidden = true; };
+    return;
+  }
+  saveReading(v, false);
+});
+$("odoInput").addEventListener("input", () => { $("odoWarn").hidden = true; });
+
+/* readings list */
+function renderReadings(){
+  const rows = [];
+  for (const r of S.records) if (r.miles != null && r.miles > 100) rows.push({ date: r.date, miles: r.miles, src: r.shop, ign: !!r.odoIgnore, rec: r.id });
+  for (const o of S.odometer) if (o.miles != null) rows.push({ date: o.date, miles: o.miles, src: "Your reading", ign: !!o.ignore, odo: o.id || (o.date + "_" + o.miles) });
+  rows.sort((a,b) => b.date.localeCompare(a.date) || b.miles - a.miles);
+  $("odoRows").innerHTML = rows.map(x => `<tr class="${x.ign ? "ign" : ""}"><td class="num">${fmtD(parseD(x.date))}</td><td class="num">${fmt(x.miles)}</td><td>${esc(x.src)}${x.ign ? ' <span class="chip">ignored</span>' : ""}</td>
+    <td style="white-space:nowrap;text-align:right">${S.canWrite ? (x.rec ? `<button class="btn small" data-rign="${esc(x.rec)}" data-val="${x.ign ? 0 : 1}">${x.ign ? "Use" : "Ignore"}</button>`
+      : `<button class="btn small" data-oign="${esc(x.odo)}" data-val="${x.ign ? 0 : 1}">${x.ign ? "Use" : "Ignore"}</button> <button class="btn small danger" data-odel="${esc(x.odo)}">Delete</button>`) : ""}</td></tr>`).join("")
+    || `<tr><td colspan="4" class="empty">No readings yet.</td></tr>`;
+}
+const odoKey = o => o.id || (o.date + "_" + o.miles);
+$("odoList").addEventListener("click", () => { if ($("odoPanel").hidden) { renderReadings(); $("odoPanel").hidden = false; $("odoPanel").scrollIntoView({behavior:"smooth", block:"start"}); } else $("odoPanel").hidden = true; });
+$("odoClose").addEventListener("click", () => { $("odoPanel").hidden = true; });
+$("odoRows").addEventListener("click", async e => {
+  const t = e.target.closest("button"); if (!t) return;
+  t.disabled = true;
+  try {
+    if (t.dataset.rign) { const id = t.dataset.rign, on = t.dataset.val === "1";
+      await save(d => { const r = d.records.find(x => x.id === id); if (r) { if (on) r.odoIgnore = true; else delete r.odoIgnore; } }, `${on ? "Ignore" : "Use"} mileage on record ${id}`); }
+    else if (t.dataset.oign) { const k = t.dataset.oign, on = t.dataset.val === "1";
+      await save(d => { const o = (d.odometer||[]).find(x => odoKey(x) === k); if (o) { if (on) o.ignore = true; else delete o.ignore; } }, `${on ? "Ignore" : "Use"} odometer reading`); }
+    else if (t.dataset.odel) { const k = t.dataset.odel;
+      await save(d => { d.odometer = (d.odometer||[]).filter(x => odoKey(x) !== k); }, "Delete odometer reading"); toast("Reading deleted"); }
+    renderReadings();
+  } catch(err){ toast(err.message); t.disabled = false; }
 });
 
 function openForm(rec, presetTag, doneBy){
@@ -692,6 +768,7 @@ function openForm(rec, presetTag, doneBy){
   const M = model();
   $("fDate").value = rec?.date || iso(today);
   $("fMiles").value = rec ? (rec.miles ?? "") : (M ? Math.round(M.est) : "");
+  $("fOdoIgn").checked = !!rec?.odoIgnore;
   $("fShop").value = rec?.shop || ""; $("fLoc").value = rec?.location || "";
   $("fType").value = rec?.type || "service"; $("fCost").value = rec?.cost ?? ""; $("fCost").dataset.touched = "";
   $("fInv").value = rec?.invoice || ""; $("fNotes").value = rec?.notes || "";
@@ -870,7 +947,7 @@ $("recForm").addEventListener("submit", async e => {
     ...(S.editing || {}), date: $("fDate").value, miles, shop: $("fShop").value.trim() || "Not recorded", location: $("fLoc").value.trim(),
     type: $("fType").value, cost: $("fCost").value ? Number($("fCost").value) : null, invoice: $("fInv").value.trim(), notes: $("fNotes").value.trim(),
     items, tags, owner: S.editing?.owner ?? 3, source: S.editing?.source || (F.doneBy==="diy" ? "DIY, added by you" : "Added by you"),
-    doneBy: F.doneBy, parts, receipts: F.receipts, hours: F.doneBy==="diy" && $("fHours").value ? Number($("fHours").value) : null
+    doneBy: F.doneBy, parts, receipts: F.receipts, odoIgnore: $("fOdoIgn").checked || undefined, hours: F.doneBy==="diy" && $("fHours").value ? Number($("fHours").value) : null
   };
   if (body.shop === "Not recorded" && F.doneBy === "diy") body.shop = "Self (DIY)";
   const id = S.editing?.id || ("u" + Date.now().toString(36));
