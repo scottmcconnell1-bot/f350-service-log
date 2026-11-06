@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#15202b">
+<title>F-350 Service Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: shop-ticket header with odometer, status strip, then tabbed workbench (Upcoming / History / Schedule) under one search bar */
+:root{
+  --bg:#f2f4f7; --surface:#ffffff; --sunk:#e8ecf1; --ink:#15202b; --muted:#566373; --line:#d6dde5;
+  --accent:#2b59c3; --accent-ink:#ffffff;
+  --over:#c2352b; --over-bg:#fbe9e7; --soon:#a86a12; --soon-bg:#fbf1df; --ok:#2c7a51; --ok-bg:#e4f3ea; --unk:#5f6b7a; --unk-bg:#eceff3;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1319; --surface:#161d25; --sunk:#1d2630; --ink:#e5eaf0; --muted:#97a4b3; --line:#29333f;
+  --accent:#86a6ff; --accent-ink:#0e1319;
+  --over:#ff8074; --over-bg:#3a1d1b; --soon:#f0b45a; --soon-bg:#3a2c14; --ok:#63d29a; --ok-bg:#15322a; --unk:#a3adb9; --unk-bg:#232c36; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1319; --surface:#161d25; --sunk:#1d2630; --ink:#e5eaf0; --muted:#97a4b3; --line:#29333f;
+  --accent:#86a6ff; --accent-ink:#0e1319;
+  --over:#ff8074; --over-bg:#3a1d1b; --soon:#f0b45a; --soon-bg:#3a2c14; --ok:#63d29a; --ok-bg:#15322a; --unk:#a3adb9; --unk-bg:#232c36; color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+img{max-width:100%}
+.note a,.panel a{color:var(--accent)}
+details summary{cursor:pointer;font-weight:600;color:var(--ink)}
+details ol{margin:8px 0 0;padding-left:20px}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.01em;text-wrap:balance;margin:0}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.eyebrow{font-family:var(--display);text-transform:uppercase;letter-spacing:.12em;font-size:12px;font-weight:600;color:var(--muted)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:end;border-bottom:2px solid var(--ink);padding-bottom:16px}
+.head h1{font-size:clamp(30px,5vw,44px);line-height:1}
+.spec{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;color:var(--muted);font-size:14px}
+.spec b{color:var(--ink);font-weight:600}
+.odo-box{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.odo{display:flex;gap:3px}
+.odo span{font-family:var(--mono);font-weight:700;font-size:26px;width:1.05em;text-align:center;background:var(--ink);color:var(--bg);border-radius:3px;padding:2px 0;line-height:1.2}
+.odo span.tenth{background:var(--over);color:#fff}
+.odo-sub{font-size:13px;color:var(--muted);text-align:right}
+.odo-edit{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.odo-edit input{width:120px}
+@media (max-width:700px){.head{grid-template-columns:1fr}.odo-box{align-items:flex-start}.odo-sub{text-align:left}.odo-edit{justify-content:flex-start}.odo span{font-size:22px}}
+
+/* controls */
+input[type=text],input[type=password],input[type=number],input[type=date],input[type=search],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 10px;min-width:0}
+textarea{width:100%;min-height:64px;resize:vertical}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:7px 12px;font-weight:600}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--over);border-color:var(--over)}
+.btn.small{padding:3px 9px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* status strip */
+.strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile .big{font-family:var(--display);font-size:30px;font-weight:700;line-height:1.05}
+.tile.over .big{color:var(--over)} .tile.soon .big{color:var(--soon)}
+.tile .sm{font-size:13px;color:var(--muted)}
+@media (max-width:760px){.strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* toolbar + tabs */
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.tabs{display:flex;gap:2px;background:var(--sunk);padding:3px;border-radius:8px}
+.tabs button{border:0;background:transparent;padding:7px 14px;border-radius:6px;font-family:var(--display);font-size:16px;font-weight:600;letter-spacing:.03em;color:var(--muted)}
+.tabs button[aria-selected=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.search{flex:1 1 260px;display:flex;gap:8px;min-width:0}
+.search input{flex:1;min-width:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:6px 11px;font-size:13px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+/* pills */
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;font-family:var(--body)}
+.pill.over{background:var(--over-bg);color:var(--over)} .pill.soon{background:var(--soon-bg);color:var(--soon)}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.unk{background:var(--unk-bg);color:var(--unk)}
+.chip{display:inline-block;font-size:12px;padding:1px 7px;border:1px solid var(--line);border-radius:4px;color:var(--muted);background:var(--bg)}
+
+/* upcoming */
+.cols{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.cols{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel h2{font-size:22px}
+.item{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:4px 12px;padding:12px 0;border-top:1px solid var(--line)}
+.item:first-of-type{border-top:0}
+.item .stripe{grid-row:1/4;border-radius:2px;background:var(--unk)}
+.item.over .stripe{background:var(--over)} .item.soon .stripe{background:var(--soon)} .item.ok .stripe{background:var(--ok)}
+.item h3{font-family:var(--body);font-size:15px;font-weight:600}
+.item .meta{font-size:13px;color:var(--muted);grid-column:2/4}
+.item .act{grid-column:2/4;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.gauge{height:6px;background:var(--sunk);border-radius:3px;overflow:hidden;grid-column:2/4}
+.gauge i{display:block;height:100%;background:var(--ok)}
+.item.over .gauge i{background:var(--over)} .item.soon .gauge i{background:var(--soon)} .item.unk .gauge i{background:var(--unk)}
+.visit{display:grid;grid-template-columns:86px minmax(0,1fr);gap:10px;padding:10px 0;border-top:1px dashed var(--line)}
+.visit:first-of-type{border-top:0}
+.visit .when{font-family:var(--display);font-weight:700;font-size:17px;line-height:1.1}
+.visit .when small{display:block;font-family:var(--mono);font-weight:500;font-size:12px;color:var(--muted)}
+.visit ul{margin:0;padding-left:18px}
+.visit li{font-size:14px}
+.note{font-size:13px;color:var(--muted);background:var(--sunk);border-radius:6px;padding:9px 11px}
+
+/* history */
+.owner-band{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:8px;padding:8px 0;border-bottom:2px solid var(--ink)}
+.owner-band h2{font-size:22px}
+.rec{display:grid;grid-template-columns:110px 96px minmax(0,1fr);gap:4px 14px;padding:12px 0;border-bottom:1px solid var(--line)}
+.rec .d{font-family:var(--mono);font-size:13px;font-weight:700}
+.rec .m{font-family:var(--mono);font-size:13px;color:var(--muted);text-align:right}
+.rec .body{display:flex;flex-direction:column;gap:5px;min-width:0}
+.rec .shop{font-weight:600}
+.rec .shop small{font-weight:400;color:var(--muted)}
+.rec ul{margin:0;padding-left:18px}
+.rec .lines{font-size:13px;color:var(--muted)}
+.rec .tagrow{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.rec .type{font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--muted)}
+.rec.service .type{color:var(--accent)} .rec.damage .type,.rec.recall .type{color:var(--over)}
+@media (max-width:640px){.rec{grid-template-columns:1fr auto}.rec .body{grid-column:1/3}.rec .m{text-align:right}}
+mark{background:var(--soon-bg);color:inherit;border-radius:2px;padding:0 1px}
+
+/* schedule table */
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:14px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--display);text-transform:uppercase;letter-spacing:.08em;font-size:12px;color:var(--muted)}
+td.num{white-space:nowrap}
+
+/* form */
+.formcard{border:2px solid var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}
+.grid .wide{grid-column:span 2} .grid .full{grid-column:1/-1}
+@media (max-width:700px){.grid{grid-template-columns:1fr 1fr}.grid .wide{grid-column:1/-1}}
+.checks{display:flex;flex-wrap:wrap;gap:6px}
+.checks label{flex-direction:row;align-items:center;gap:6px;font-weight:500;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 9px;background:var(--bg)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.drop.over{border-color:var(--accent);background:var(--sunk)}
+.rcpts{display:flex;flex-wrap:wrap;gap:8px}
+.rcpts:empty{display:none}
+.rcpt{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:4px 6px 4px 4px;max-width:100%;min-width:0;font-size:13px;color:var(--ink);text-decoration:none}
+.rcpt img,.rcpt .pdf{width:40px;height:40px;object-fit:cover;border-radius:4px;flex:none;background:var(--sunk)}
+.rcpt .pdf{display:grid;place-items:center;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--over)}
+.rcpt span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
+.rcpt button{border:0;background:transparent;color:var(--muted);font-size:16px;padding:0 4px}
+.parts{display:flex;flex-direction:column;gap:6px}
+.prow{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(0,1.3fr) 70px 90px 30px;gap:6px}
+.prow button{border:0;background:transparent;color:var(--muted);font-size:18px}
+@media (max-width:640px){.prow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.prow button{justify-self:end}}
+.ptable{font-size:13px;border-collapse:collapse;min-width:0;width:auto}
+.ptable td{padding:2px 12px 2px 0;border:0}
+.pill.diy{background:var(--sunk);color:var(--accent);border:1px solid var(--accent)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-weight:600;z-index:20}
+.empty{padding:28px 10px;text-align:center;color:var(--muted)}
+.confirm{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--over)}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header class="head">
+    <div>
+      <div class="eyebrow">Service log · VIN <span class="num" id="vin">1FT8W3BTXDEB87928</span></div>
+      <h1 id="title">2013 Ford F-350 Super Duty Lariat</h1>
+      <div class="spec" id="spec"><span><b>6.7L Power Stroke</b> diesel</span><span>6R140 automatic</span><span>Crew Cab 4x4</span></div>
+    </div>
+    <div class="odo-box">
+      <div class="eyebrow">Estimated odometer today</div>
+      <div class="odo" id="odo" aria-label="Estimated odometer"></div>
+      <div class="odo-sub" id="odoSub">Connect your data in Settings to load readings.</div>
+      <div class="odo-edit" id="odoEdit" hidden>
+        <input type="number" id="odoInput" inputmode="numeric" placeholder="Actual miles" aria-label="Current odometer reading">
+        <button class="btn small primary" id="odoSave">Save reading</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="strip" id="strip">
+    <div class="tile over"><span class="eyebrow">Overdue</span><span class="big" id="tOver">–</span><span class="sm" id="tOverSm">items past due</span></div>
+    <div class="tile soon"><span class="eyebrow">Due soon</span><span class="big" id="tSoon">–</span><span class="sm">within 2,000 mi or 60 days</span></div>
+    <div class="tile"><span class="eyebrow">Driving rate</span><span class="big num" id="tRate">–</span><span class="sm" id="tRateSm">miles per year</span></div>
+    <div class="tile"><span class="eyebrow">Records on file</span><span class="big num" id="tRecs">–</span><span class="sm" id="tRecsSm">since 2013</span></div>
+  </section>
+
+  <div class="bar">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-upcoming" aria-selected="true" data-tab="upcoming">Upcoming</button>
+      <button role="tab" id="tab-history" aria-selected="false" data-tab="history">History</button>
+      <button role="tab" id="tab-schedule" aria-selected="false" data-tab="schedule">Schedule</button>
+    </div>
+    <div class="search">
+      <input type="search" id="q" placeholder="Search: fuel filter, Valvoline, brakes, 150042, 2025…" aria-label="Search maintenance">
+      <button class="btn primary" id="addBtn" hidden>+ Shop service</button><button class="btn primary" id="diyBtn" hidden>+ DIY job</button><button class="btn" id="settingsBtn" title="Settings" aria-label="Settings">⚙ Settings</button>
+    </div>
+  </div>
+
+  <section class="panel formcard" id="settings" hidden>
+    <div class="row" style="justify-content:space-between"><h2>Settings</h2><button class="btn small" id="sClose" type="button">Close</button></div>
+    <p class="muted" style="margin:0;font-size:14px">Your records and receipts live in a private GitHub repo. This page reads and writes it straight from your browser with a token you paste once on each device. The token and API key are saved only in this browser, never in the website's code.</p>
+    <form id="setForm" class="grid">
+      <label>GitHub owner<input id="sOwner" type="text" autocomplete="off" spellcheck="false"></label>
+      <label>Data repo<input id="sRepo" type="text" autocomplete="off" spellcheck="false"></label>
+      <label>Branch<input id="sBranch" type="text" autocomplete="off" spellcheck="false"></label>
+      <span></span>
+      <label class="full">GitHub token<input id="sToken" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…"></label>
+      <details class="full note"><summary>How to make the GitHub token</summary><ol>
+        <li>Open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>.</li>
+        <li>Name it “F-350 Service Log” and pick an expiration (up to a year, or none).</li>
+        <li>Under <b>Repository access</b>, choose <b>Only select repositories</b> and pick your data repo.</li>
+        <li>Under <b>Permissions → Repository permissions</b>, set <b>Contents</b> to <b>Read and write</b>.</li>
+        <li>Click <b>Generate token</b>, copy it, and paste it above.</li></ol></details>
+      <label class="wide">Anthropic API key (optional, for reading receipts)<input id="sAkey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"></label>
+      <label class="wide">Claude model<input id="sModel" type="text" autocomplete="off" spellcheck="false"></label>
+      <details class="full note"><summary>About the Anthropic key</summary>Create one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com/settings/keys</a> and add a few dollars of credit. Each receipt read costs roughly a few cents. Without a key, everything else works and you type receipt details by hand.</details>
+      <div class="full row"><button class="btn primary" type="submit">Connect</button><button class="btn danger" type="button" id="signOut" hidden>Sign out on this device</button><span class="muted" id="sMsg"></span></div>
+    </form>
+  </section>
+
+  <section class="panel formcard" id="formPanel" hidden>
+    <div class="row" style="justify-content:space-between"><h2 id="formTitle">Log a service</h2><button class="btn small" id="formClose">Close</button></div>
+    <div class="drop" id="drop">
+      <div class="row" style="justify-content:space-between;width:100%">
+        <div><b>Receipts & photos</b><div class="muted" style="font-size:13px" id="dropHint">Drop a receipt photo or PDF here, or choose files. They're stored with this record.</div></div>
+        <div class="row">
+          <label class="btn small" for="fFiles" id="pickLbl">Choose files</label>
+          <input type="file" id="fFiles" accept="image/*,application/pdf" multiple hidden>
+          <button class="btn small primary" type="button" id="readBtn" hidden>Fill form from receipt</button>
+        </div>
+      </div>
+      <div class="rcpts" id="fRcpts"></div>
+      <div class="muted" id="readMsg" style="font-size:13px"></div>
+    </div>
+    <form id="recForm" class="grid">
+      <div class="full row"><span class="eyebrow">Who did the work</span>
+        <div class="seg" id="doneSeg"><button type="button" data-done-by="shop" aria-pressed="true">Shop</button><button type="button" data-done-by="diy" aria-pressed="false">DIY (me)</button></div>
+      </div>
+      <label>Date<input type="date" id="fDate" required></label>
+      <label>Odometer (mi)<input type="number" id="fMiles" inputmode="numeric"></label>
+      <label class="wide"><span id="shopLbl">Shop</span><input type="text" id="fShop" list="shops" placeholder="e.g. Valvoline Instant Oil Change"></label>
+      <datalist id="shops"></datalist>
+      <label class="wide">Location<input type="text" id="fLoc" placeholder="City, ST"></label>
+      <label>Type<select id="fType"><option value="service">Service / repair</option><option value="inspection">Inspection</option><option value="recall">Recall / program</option><option value="damage">Damage</option><option value="title">Title / registration</option><option value="event">Other event</option></select></label>
+      <label>Total cost ($)<input type="number" id="fCost" step="0.01" inputmode="decimal"></label>
+      <div class="full"><div class="eyebrow" style="margin-bottom:6px">Scheduled items done (resets their countdown)</div><div class="checks" id="fChecks"></div></div>
+      <div class="full" id="partsBox">
+        <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="eyebrow">Parts & fluids used</span><button type="button" class="btn small" id="addPart">+ Add part</button></div>
+        <div class="parts" id="fParts"></div>
+      </div>
+      <label class="full">Other work, one per line<textarea id="fOther" placeholder="Replaced front brake pads&#10;New batteries (2)"></textarea></label>
+      <label id="hrsLbl" hidden>Your time (hours)<input type="number" id="fHours" step="0.25" inputmode="decimal"></label>
+      <label class="wide" id="invLbl">Invoice #<input type="text" id="fInv"></label>
+      <label class="wide">Notes<input type="text" id="fNotes"></label>
+      <div class="full row"><button class="btn primary" type="submit" id="fSubmit">Save record</button><span class="muted" id="fMsg"></span></div>
+    </form>
+  </section>
+
+  <main id="view-upcoming">
+    <div class="cols">
+      <section class="panel">
+        <div class="row" style="justify-content:space-between">
+          <h2>Maintenance status</h2>
+          <div class="row"><span class="eyebrow">Schedule</span>
+            <div class="seg" id="modeSeg"><button data-mode="normal" aria-pressed="true">Normal</button><button data-mode="severe" aria-pressed="false">Severe / towing</button></div>
+          </div>
+        </div>
+        <div id="items"><div class="empty">Loading your maintenance schedule…</div></div>
+      </section>
+      <section class="panel">
+        <h2>Forecast: next 3 years</h2>
+        <p class="muted" style="margin:0;font-size:14px">Predicted shop visits, grouping items that fall due within about 6 weeks of each other. Dates come from your driving rate.</p>
+        <div id="visits"><div class="empty">Waiting for data…</div></div>
+        <div class="note" id="openItems"></div>
+      </section>
+    </div>
+  </main>
+
+  <main id="view-history" hidden>
+    <div class="filters" style="margin-bottom:6px">
+      <div class="seg" id="typeSeg">
+        <button data-type="all" aria-pressed="false">All</button>
+        <button data-type="service" aria-pressed="true">Service</button>
+        <button data-type="diy" aria-pressed="false">DIY</button>
+        <button data-type="inspection" aria-pressed="false">Inspections</button>
+        <button data-type="title" aria-pressed="false">Title / reg.</button>
+        <button data-type="alert" aria-pressed="false">Damage & recalls</button>
+      </div>
+      <select id="ownerSel" aria-label="Owner"><option value="all">All owners</option><option value="3">You (2024–)</option><option value="2">Owner 2 (2019–2024)</option><option value="1">Owner 1 (2013–2019)</option></select>
+      <span class="muted" id="histCount"></span>
+      <span style="flex:1"></span>
+      <button class="btn small" id="exportBtn" hidden>Download backup</button>
+    </div>
+    <div id="history"><div class="empty">Loading history…</div></div>
+  </main>
+
+  <main id="view-schedule" hidden>
+    <section class="panel">
+      <h2>Ford schedule for the 6.7L diesel</h2>
+      <p class="muted" style="margin:0;font-size:14px">Your owner's guide covers only the gas engines and points to a separate Diesel Supplement, which wasn't in your files. These intervals come from the 6.7L Power Stroke schedule and the owner's guide inspection items. Use <b>Severe</b> if you tow, haul heavy, idle a lot, or drive dusty or off-road.</p>
+      <div class="tblwrap"><table><thead><tr><th>Item</th><th>Normal</th><th>Severe</th><th>Parts / fluid</th><th>Basis</th></tr></thead><tbody id="schedBody"></tbody></table></div>
+      <div class="note"><b>Owner checks, monthly:</b> oil level, all lights, tire pressure and wear (including spare), washer fluid, DEF level. <b>Every 6 months:</b> battery terminals, coolant level and strength, door and body drains, weatherstrips, hinges and latches, parking brake, seat belts, warning lamps, wiper blades. Ford also calls for a multi-point inspection at every service.</div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const DAY = 864e5;
+const S = { records: [], schedule: [], odometer: [], vehicle: null, tab: "upcoming", type: "service", owner: "all", q: "", canWrite: false, editing: null };
+
+const fmt = n => n == null ? "—" : Math.round(n).toLocaleString("en-US");
+const parseD = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const today = (() => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); })();
+const addMonths = (d, m) => { const x = new Date(d); x.setMonth(x.getMonth()+m); return x; };
+const fmtD = d => d ? d.toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"}) : "—";
+const fmtMY = d => d.toLocaleDateString("en-US", {month:"short", year:"numeric"});
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function hl(s){ const t = esc(s); if(!S.q) return t; const words = S.q.trim().split(/\s+/).filter(w=>w.length>1).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")); if(!words.length) return t; return t.replace(new RegExp("("+words.join("|")+")","gi"),"<mark>$1</mark>"); }
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2600); }
+const mode = () => S.vehicle?.mode === "severe" ? "severe" : "normal";
+
+/* ---------- mileage model ---------- */
+function readings(){
+  const pts = [];
+  for (const r of S.records) if (r.miles != null && r.date && r.miles > 100) pts.push({date: parseD(r.date), miles: r.miles, src: r.shop});
+  for (const o of S.odometer) if (o.miles != null && o.date) pts.push({date: parseD(o.date), miles: o.miles, src: "Your reading"});
+  pts.sort((a,b) => a.date - b.date || a.miles - b.miles);
+  return pts;
+}
+function model(){
+  const pts = readings();
+  if (!pts.length) return null;
+  const last = pts.reduce((a,b) => b.miles >= a.miles ? b : a);
+  const win = pts.filter(p => last.date - p.date <= 730*DAY);
+  let rate = null;
+  if (win.length >= 3) {
+    const xs = win.map(p => p.date/DAY), ys = win.map(p => p.miles);
+    const mx = xs.reduce((a,b)=>a+b)/xs.length, my = ys.reduce((a,b)=>a+b)/ys.length;
+    let num=0, den=0; xs.forEach((x,i)=>{num+=(x-mx)*(ys[i]-my); den+=(x-mx)**2;});
+    rate = den ? num/den : null;
+  }
+  if (!rate || rate <= 0) { const f = pts[0]; rate = (last.miles - f.miles) / Math.max(1,(last.date - f.date)/DAY); }
+  const est = last.miles + rate * Math.max(0, (today - last.date)/DAY);
+  return { last, rate, est, n: pts.length, milesToDate: m => new Date(last.date.getTime() + ((m - last.miles)/rate)*DAY) };
+}
+
+/* ---------- predictions ---------- */
+function lastDone(item){
+  let best = null;
+  for (const r of S.records) {
+    if (!r.tags?.some(t => item.tags.includes(t))) continue;
+    if (!best || (r.miles ?? 0) > (best.miles ?? 0) || ((r.miles ?? 0) === (best.miles ?? 0) && r.date > best.date)) best = r;
+  }
+  return best;
+}
+function evaluate(item, M){
+  const iv = item[mode()] || item.normal || {};
+  const rec = lastDone(item);
+  const base = rec ? { miles: rec.miles ?? 0, date: parseD(rec.date), rec } : { miles: 0, date: parseD("2013-08-30"), none: true };
+  const dueMiles = iv.mi ? base.miles + iv.mi : null;
+  const dueByTime = iv.mo ? addMonths(base.date, iv.mo) : null;
+  const dueByMiles = dueMiles && M ? M.milesToDate(dueMiles) : null;
+  const dueDate = [dueByTime, dueByMiles].filter(Boolean).sort((a,b)=>a-b)[0] || null;
+  const remain = dueMiles != null && M ? dueMiles - M.est : null;
+  const daysLeft = dueDate ? Math.round((dueDate - today)/DAY) : null;
+  let status = "ok";
+  if ((remain != null && remain < 0) || (daysLeft != null && daysLeft < 0)) status = "over";
+  else if ((remain != null && remain <= 2000) || (daysLeft != null && daysLeft <= 60)) status = "soon";
+  let used = 0;
+  if (iv.mi && M) used = Math.max(used, (M.est - base.miles)/iv.mi);
+  if (iv.mo) used = Math.max(used, (today - base.date)/(iv.mo*30.44*DAY));
+  if (item.optional && base.none) status = "unk";
+  return { item, iv, base, dueMiles, dueDate, dueByTime, remain, daysLeft, status: base.none && status !== "over" ? (status==="ok"?"unk":status) : status, used };
+}
+function forecast(evals, M){
+  const horizon = addMonths(today, 36), occ = [];
+  for (const e of evals) {
+    if (!e.dueDate || (e.item.optional && e.base.none)) continue;
+    let miles = e.dueMiles, date = e.dueDate, n = 0;
+    if (date < today) { date = today; miles = Math.round(M.est); }
+    while (date <= horizon && n < 12) {
+      occ.push({ name: e.item.name, date, miles, first: n===0, status: n===0 ? e.status : "ok" });
+      n++;
+      const nm = e.iv.mi ? (miles ?? M.est) + e.iv.mi : null;
+      const byM = nm ? M.milesToDate(nm) : null;
+      const byT = e.iv.mo ? addMonths(date, e.iv.mo) : null;
+      const nd = [byM, byT].filter(Boolean).sort((a,b)=>a-b)[0];
+      if (!nd) break;
+      miles = nm ?? Math.round(M.last.miles + M.rate*((nd - M.last.date)/DAY));
+      date = nd;
+    }
+  }
+  occ.sort((a,b) => a.date - b.date);
+  const visits = [];
+  for (const o of occ) {
+    const v = visits[visits.length-1];
+    if (v && o.date - v.start <= 45*DAY) v.items.push(o);
+    else visits.push({ start: o.date, items: [o] });
+  }
+  return visits;
+}
+
+/* ---------- search ---------- */
+function recText(r){ return [r.date, r.miles, r.shop, r.location, r.phone, r.invoice, r.notes, r.checks, r.source, r.doneBy==="diy"?"diy do it yourself":"", ...(r.items||[]), ...(r.lines||[]), ...(r.parts||[]).flatMap(p=>[p.name,p.partNo]), ...(r.receipts||[]).map(x=>x.name), ...(r.tags||[]).map(t=>t.replace(/_/g," "))].join(" ").toLowerCase(); }
+function rcptChip(x, removable){
+  const isImg = (x.type||"").startsWith("image/");
+  const thumb = isImg ? `<img data-rpath="${esc(x.path)}" alt="">` : `<div class="pdf">PDF</div>`;
+  return removable ? `<div class="rcpt">${thumb}<span>${esc(x.name)}</span><button type="button" data-rmrcpt="${esc(x.path)}" aria-label="Remove ${esc(x.name)}">×</button></div>`
+                   : `<a class="rcpt" href="#" data-open="${esc(x.path)}">${thumb}<span>${esc(x.name)}</span></a>`;
+}
+const matchQ = txt => !S.q || S.q.toLowerCase().split(/\s+/).filter(Boolean).every(w => txt.includes(w.replace(/,/g,"")));
+
+/* ---------- render ---------- */
+function renderHeader(M){
+  const v = S.vehicle;
+  if (v) {
+    $("title").textContent = `${v.year} ${v.make} ${v.model} ${v.trim||""}`.trim();
+    $("vin").textContent = v.vin;
+    $("spec").innerHTML = `<span><b>${esc(v.engine)}</b></span><span>${esc(v.transmission)}</span><span>${esc(v.body)}</span><span>${esc(v.city||"")}</span>` +
+      (v.docs||[]).map(d => `<a href="#" data-open="${esc(d.path)}" style="color:var(--accent);font-weight:600">${esc(d.name)} ↗</a>`).join("");
+  }
+  const digits = M ? String(Math.round(M.est)).padStart(6,"0") : "------";
+  $("odo").innerHTML = [...digits].map(d=>`<span>${d}</span>`).join("") + `<span class="tenth">${M?"~":"-"}</span>`;
+  if (M) {
+    const days = Math.round((today - M.last.date)/DAY);
+    $("odoSub").innerHTML = days <= 0 ? `Last reading ${fmt(M.last.miles)} mi today` :
+      `Last reading <span class="num">${fmt(M.last.miles)}</span> mi on ${fmtD(M.last.date)} (${esc(M.last.src)}) + ${days} days at ~${fmt(M.rate)} mi/day`;
+    $("tRate").textContent = fmt(M.rate*365.25);
+    $("tRateSm").textContent = `mi/yr, trend of last 2 years`;
+  } else $("odoSub").textContent = "No odometer readings yet.";
+  $("odoEdit").hidden = !S.canWrite;
+  $("addBtn").hidden = !S.canWrite; $("diyBtn").hidden = !S.canWrite;
+  $("exportBtn").hidden = !S.records.length;
+  $("tRecs").textContent = S.records.length || "–";
+  const svc = S.records.filter(r=>r.type==="service").length;
+  $("tRecsSm").textContent = `${svc} service visits since 2013`;
+}
+
+function renderUpcoming(M){
+  const evals = S.schedule.slice().sort((a,b)=>(a.order??0)-(b.order??0)).map(i => evaluate(i, M));
+  const rank = {over:0, soon:1, unk:2, ok:3};
+  evals.sort((a,b) => rank[a.status]-rank[b.status] || (a.dueDate??Infinity)-(b.dueDate??Infinity));
+  const over = evals.filter(e=>e.status==="over"), soon = evals.filter(e=>e.status==="soon");
+  $("tOver").textContent = S.schedule.length ? over.length : "–";
+  $("tOverSm").textContent = over.length ? over.slice(0,2).map(e=>e.item.name.split(" (")[0]).join(", ") + (over.length>2?"…":"") : "items past due";
+  $("tSoon").textContent = S.schedule.length ? soon.length : "–";
+  document.querySelectorAll("#modeSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode===mode())));
+
+  const shown = evals.filter(e => matchQ([e.item.name, e.item.category, e.item.parts, e.item.notes, e.item.basis, ...(e.item.tags||[])].join(" ").toLowerCase()));
+  if (!S.schedule.length) { $("items").innerHTML = `<div class="empty">No schedule loaded yet. It appears here once the data finishes loading.</div>`; }
+  else if (!shown.length) { $("items").innerHTML = `<div class="empty">No scheduled item matches “${esc(S.q)}”. Try the History tab.</div>`; }
+  else $("items").innerHTML = shown.map(e => {
+    const label = {over:"Overdue", soon:"Due soon", ok:"OK", unk:"No record"}[e.status];
+    const ivTxt = [e.iv.mi ? `${fmt(e.iv.mi)} mi` : null, e.iv.mo ? `${e.iv.mo} mo` : null].filter(Boolean).join(" / ") || "as needed";
+    const lastTxt = e.base.none ? `No record on file, counted from new (Aug 2013)` :
+      `Last: ${fmtD(e.base.date)} at <span class="num">${fmt(e.base.miles)}</span> mi · ${esc(e.base.rec.shop)}`;
+    let dueTxt = "";
+    if (e.dueMiles != null) dueTxt += `Due at <b class="num">${fmt(e.dueMiles)}</b> mi`;
+    if (e.dueDate) dueTxt += `${dueTxt?" · ":"Due "}${e.status==="over"?"was due":"≈"} ${fmtD(e.dueDate)}`;
+    if (e.remain != null) dueTxt += ` · <span class="num">${e.remain<0 ? fmt(-e.remain)+" mi over" : fmt(e.remain)+" mi left"}</span>`;
+    const tag = e.item.tags[0];
+    return `<div class="item ${e.status}">
+      <span class="stripe"></span>
+      <h3>${hl(e.item.name)}</h3>
+      <span class="pill ${e.status}">${label}</span>
+      <div class="gauge" title="${Math.round(e.used*100)}% of interval used"><i style="width:${Math.min(100,Math.round(e.used*100))}%"></i></div>
+      <div class="meta">${dueTxt} <span class="chip">every ${ivTxt}</span></div>
+      <div class="meta">${lastTxt}</div>
+      ${e.item.notes ? `<div class="meta">${hl(e.item.notes)}</div>` : ""}
+      ${S.canWrite ? `<div class="act"><button class="btn small" data-done="${esc(tag)}">Mark done</button><span class="muted" style="font-size:12px">${hl(e.item.parts||"")}</span></div>` : (e.item.parts?`<div class="meta">${hl(e.item.parts)}</div>`:"")}
+    </div>`;
+  }).join("");
+
+  if (M && evals.length) {
+    const visits = forecast(evals, M).slice(0, 10);
+    $("visits").innerHTML = visits.map((v,i) => {
+      const nowish = v.items.some(o => o.status==="over");
+      const miles = v.items.map(o=>o.miles).filter(Boolean);
+      const mi = miles.length ? Math.min(...miles) : null;
+      return `<div class="visit"><div class="when">${nowish && i===0 ? "Now" : fmtMY(v.start)}<small>${mi?"~"+fmt(Math.max(mi, nowish?M.est:0))+" mi":""}</small></div>
+        <ul>${v.items.map(o=>`<li>${esc(o.name)}${o.status==="over"?' <span class="pill over">overdue</span>':""}</li>`).join("")}</ul></div>`;
+    }).join("") || `<div class="empty">Nothing due in the next 3 years.</div>`;
+  }
+  const egr = S.records.find(r => r.tags?.includes("egr_program"));
+  const eng = S.records.find(r => r.tags?.includes("engine_replaced"));
+  const notes = [];
+  if (egr) notes.push(`<b>Open Ford program:</b> 21M04 EGR cooler (issued Jan 2022), with no completion on record. Call a Ford dealer with your VIN.`);
+  if (eng) notes.push(`<b>Engine:</b> long block replaced Jul 2022 at ${fmt(eng.miles)} mi, so the engine itself has about ${M?fmt(M.est-eng.miles):"—"} mi.`);
+  notes.push(`<b>Tire pressure:</b> Valvoline logged 50/50 psi in Dec 2025 versus 65/80 in Aug 2025. Check the door-jamb placard, since heavy-duty trucks usually run higher pressures.`);
+  $("openItems").innerHTML = notes.join("<br>");
+}
+
+function renderHistory(){
+  let list = S.records.slice().sort((a,b) => b.date.localeCompare(a.date) || (b.miles??0)-(a.miles??0));
+  if (S.type === "alert") list = list.filter(r => r.type==="damage" || r.type==="recall");
+  else if (S.type === "title") list = list.filter(r => r.type==="title" || r.type==="event");
+  else if (S.type === "diy") list = list.filter(r => r.doneBy==="diy");
+  else if (S.type !== "all") list = list.filter(r => r.type===S.type);
+  if (S.owner !== "all") list = list.filter(r => String(r.owner)===S.owner);
+  list = list.filter(r => matchQ(recText(r)));
+  $("histCount").textContent = `${list.length} record${list.length===1?"":"s"}`;
+  if (!S.records.length) { $("history").innerHTML = `<div class="empty">No records yet. Use “+ Shop service” or “+ DIY job” to add the first one.</div>`; return; }
+  if (!list.length) { $("history").innerHTML = `<div class="empty">Nothing matches. Clear the search or pick “All”.</div>`; return; }
+  const ownerName = {1:"Owner 1 · California, 2013–2019", 2:"Owner 2 · California, 2019–2024", 3:"You · Idaho, 2024–"};
+  let html = "", cur = null;
+  for (const r of list) {
+    if (r.owner !== cur) { cur = r.owner; html += `<div class="owner-band"><h2>${ownerName[cur] || "Owner "+cur}</h2></div>`; }
+    const typeLbl = {service:"Service",inspection:"Inspection",title:"Title / registration",damage:"Damage",recall:"Recall / program",event:"Event"}[r.type] || r.type;
+    html += `<article class="rec ${esc(r.type)}">
+      <div class="d">${hl(fmtD(parseD(r.date)))}</div>
+      <div class="m">${r.miles!=null ? hl(fmt(r.miles))+" mi" : "—"}</div>
+      <div class="body">
+        <div class="shop"><span class="type">${typeLbl}</span> ${r.doneBy==="diy"?'<span class="pill diy">DIY</span>':""} · ${hl(r.shop)} ${r.location?`<small>${hl(r.location)}</small>`:""} ${r.cost!=null?`<span class="num" style="float:right">$${Number(r.cost).toFixed(2)}</span>`:""}</div>
+        <ul>${(r.items||[]).map(i=>`<li>${hl(i)}</li>`).join("")}</ul>
+        ${(r.parts||[]).length ? `<div style="overflow-x:auto"><table class="ptable"><tbody>${r.parts.map(p=>`<tr><td>${hl(p.name)}</td><td class="num muted">${hl(p.partNo||"")}</td><td class="num">${p.qty?esc(p.qty)+"×":""}</td><td class="num">${p.cost!=null&&p.cost!==""?"$"+Number(p.cost).toFixed(2):""}</td></tr>`).join("")}</tbody></table></div>` : ""}
+        ${r.hours ? `<div class="lines"><b>Your time:</b> ${esc(r.hours)} h</div>` : ""}
+        ${(r.receipts||[]).length ? `<div class="rcpts">${r.receipts.map(rcptChip).join("")}</div>` : ""}
+        ${(r.lines||[]).length ? `<div class="lines">${r.lines.map(hl).join("<br>")}</div>` : ""}
+        ${r.checks ? `<div class="lines"><b>Checks:</b> ${hl(r.checks)}</div>` : ""}
+        ${r.notes ? `<div class="lines"><b>Note:</b> ${hl(r.notes)}</div>` : ""}
+        <div class="tagrow"><span class="chip">${hl(r.source||"")}${r.invoice?" · inv "+hl(r.invoice):""}</span>
+          ${S.canWrite ? `<span style="flex:1"></span><button class="btn small" data-edit="${esc(r.id)}">Edit</button><span data-delwrap="${esc(r.id)}"><button class="btn small danger" data-del="${esc(r.id)}">Delete</button></span>` : ""}
+        </div>
+      </div></article>`;
+  }
+  $("history").innerHTML = html;
+}
+
+function renderSchedule(){
+  const rows = S.schedule.slice().sort((a,b)=>(a.order??0)-(b.order??0))
+    .filter(i => matchQ([i.name,i.parts,i.basis,i.notes,i.category].join(" ").toLowerCase()));
+  const iv = x => !x ? "—" : [x.mi?fmt(x.mi)+" mi":null, x.mo?x.mo+" mo":null].filter(Boolean).join(" / ") || "as needed";
+  $("schedBody").innerHTML = rows.map(i => `<tr><td><b>${hl(i.name)}</b><br><span class="muted" style="font-size:12px">${esc(i.category)}${i.kind==="practice"?" · not a Ford item":""}</span></td>
+    <td class="num">${iv(i.normal)}</td><td class="num">${iv(i.severe)}</td><td>${hl(i.parts||"—")}</td><td class="muted" style="font-size:13px">${hl(i.basis||"")}</td></tr>`).join("")
+    || `<tr><td colspan="5" class="empty">No schedule items match.</td></tr>`;
+}
+
+function render(){
+  const M = model();
+  renderHeader(M);
+  if (S.tab==="upcoming") renderUpcoming(M);
+  if (S.tab==="history") renderHistory();
+  if (S.tab==="schedule") renderSchedule();
+  setTimeout(hydrateThumbs, 0);
+  if (S.tab!=="upcoming") { const ev = S.schedule.map(i=>evaluate(i,M)); $("tOver").textContent = S.schedule.length?ev.filter(e=>e.status==="over").length:"–"; $("tSoon").textContent = S.schedule.length?ev.filter(e=>e.status==="soon").length:"–"; }
+}
+
+/* ---------- storage: private GitHub repo ---------- */
+const CFG_KEY = "f350cfg", CACHE_KEY = "f350db";
+let CFG = {};
+try { CFG = JSON.parse(localStorage.getItem(CFG_KEY) || "{}"); } catch (e) { CFG = {}; }
+let DB = null, SHA = null;
+
+function ghHeaders(extra){ return { Authorization: `Bearer ${CFG.token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(extra||{}) }; }
+function ghURL(path){ return `https://api.github.com/repos/${encodeURIComponent(CFG.owner)}/${encodeURIComponent(CFG.repo)}/${path}`; }
+const encPath = p => p.split("/").map(encodeURIComponent).join("/");
+function b64FromBytes(bytes){ let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); }
+const b64FromText = t => b64FromBytes(new TextEncoder().encode(t));
+const textFromB64 = b => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\n/g,"")), c => c.charCodeAt(0)));
+async function b64FromBlob(blob){ return b64FromBytes(new Uint8Array(await blob.arrayBuffer())); }
+class GHError extends Error { constructor(status, msg){ super(msg); this.status = status; } }
+async function ghFail(r, what){
+  let m = ""; try { m = (await r.json()).message || ""; } catch(e){}
+  const hint = r.status === 401 ? "The GitHub token was rejected. Open Settings and paste a new one."
+    : r.status === 403 ? (/rate limit/i.test(m) ? "GitHub's rate limit was hit. Wait a few minutes." : "The token doesn't allow this. It needs Contents: Read and write on the data repo.")
+    : r.status === 404 ? "The data repo or file wasn't found. Check the owner and repo names in Settings."
+    : `GitHub said: ${m || r.status}`;
+  throw new GHError(r.status, `${what}: ${hint}`);
+}
+async function loadDb(){
+  const ref = encodeURIComponent(CFG.branch || "main");
+  const r = await fetch(ghURL(`contents/data/db.json?ref=${ref}`), { headers: ghHeaders(), cache: "no-store" });
+  if (!r.ok) await ghFail(r, "Couldn't load your records");
+  const j = await r.json();
+  let text;
+  if (j.content && j.encoding === "base64") text = textFromB64(j.content);
+  else {
+    const raw = await fetch(ghURL(`contents/data/db.json?ref=${ref}`), { headers: ghHeaders({ Accept: "application/vnd.github.raw" }), cache: "no-store" });
+    if (!raw.ok) await ghFail(raw, "Couldn't load your records");
+    text = await raw.text();
+  }
+  DB = JSON.parse(text); SHA = j.sha;
+  applyDb();
+}
+function applyDb(){
+  S.records = DB.records || []; S.schedule = DB.schedule || []; S.odometer = DB.odometer || []; S.vehicle = DB.vehicle || null;
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(DB)); } catch(e){}
+  render();
+}
+async function save(mutate, message){
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const next = JSON.parse(JSON.stringify(DB));
+    mutate(next);
+    next.updated = new Date().toISOString();
+    const r = await fetch(ghURL("contents/data/db.json"), { method: "PUT", headers: ghHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ message, content: b64FromText(JSON.stringify(next, null, 1)), sha: SHA, branch: CFG.branch || "main" }) });
+    if (r.ok) { const j = await r.json(); SHA = j.content.sha; DB = next; applyDb(); return; }
+    if (r.status === 409 || r.status === 422) { await loadDb(); continue; }
+    await ghFail(r, "Couldn't save");
+  }
+  throw new GHError(409, "Couldn't save: the data kept changing on another device. Reload and try again.");
+}
+async function putFile(path, blob, message){
+  const r = await fetch(ghURL("contents/" + encPath(path)), { method: "PUT", headers: ghHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ message, content: await b64FromBlob(blob), branch: CFG.branch || "main" }) });
+  if (!r.ok) await ghFail(r, "Couldn't upload");
+}
+const blobCache = new Map();
+async function fileBlob(path){
+  if (blobCache.has(path)) return blobCache.get(path).blob;
+  const r = await fetch(ghURL("contents/" + encPath(path) + "?ref=" + encodeURIComponent(CFG.branch || "main")), { headers: ghHeaders({ Accept: "application/vnd.github.raw" }) });
+  if (!r.ok) await ghFail(r, "Couldn't open the file");
+  let blob = await r.blob();
+  const ext = path.split(".").pop().toLowerCase();
+  const type = ext === "pdf" ? "application/pdf" : ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : /^jpe?g$/.test(ext) ? "image/jpeg" : blob.type;
+  if (blob.type !== type) blob = new Blob([blob], { type });
+  blobCache.set(path, { blob, url: URL.createObjectURL(blob) });
+  return blob;
+}
+async function fileURL(path){ await fileBlob(path); return blobCache.get(path).url; }
+async function deleteFile(path, message){
+  const meta = await fetch(ghURL("contents/" + encPath(path) + "?ref=" + encodeURIComponent(CFG.branch || "main")), { headers: ghHeaders(), cache: "no-store" });
+  if (!meta.ok) return;
+  const { sha } = await meta.json();
+  await fetch(ghURL("contents/" + encPath(path)), { method: "DELETE", headers: ghHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ message, sha, branch: CFG.branch || "main" }) });
+}
+function hydrateThumbs(){
+  document.querySelectorAll("img[data-rpath]:not([src])").forEach(img => {
+    fileURL(img.dataset.rpath).then(u => { img.src = u; }).catch(() => { img.replaceWith(Object.assign(document.createElement("div"), { className: "pdf", textContent: "IMG" })); });
+  });
+}
+function openFile(path){
+  const w = window.open("", "_blank");
+  if (w) w.document.write("<p style='font-family:sans-serif;padding:20px'>Opening receipt…</p>");
+  fileURL(path).then(u => { if (w) w.location.href = u; else location.href = u; }).catch(e => { if (w) w.close(); toast(e.message); });
+}
+
+/* ---------- interactions ---------- */
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+  S.tab = b.dataset.tab;
+  document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", String(x===b)));
+  ["upcoming","history","schedule"].forEach(t => $("view-"+t).hidden = t!==S.tab);
+  try { localStorage.setItem("f350tab", S.tab); } catch(e){}
+  render(); hydrateThumbs();
+}));
+let qt; $("q").addEventListener("input", e => { clearTimeout(qt); qt = setTimeout(() => {
+  S.q = e.target.value.trim();
+  if (S.q && S.tab==="upcoming") { const anyItem = S.schedule.some(i=>matchQ([i.name,i.category,i.parts,i.notes,...i.tags].join(" ").toLowerCase())); if(!anyItem) { $("tab-history").click(); return; } }
+  render(); hydrateThumbs(); }, 150); });
+document.querySelectorAll("#typeSeg button").forEach(b => b.addEventListener("click", () => {
+  S.type = b.dataset.type; document.querySelectorAll("#typeSeg button").forEach(x=>x.setAttribute("aria-pressed", String(x===b))); render(); hydrateThumbs(); }));
+$("ownerSel").addEventListener("change", e => { S.owner = e.target.value; render(); hydrateThumbs(); });
+
+document.querySelectorAll("#modeSeg button").forEach(b => b.addEventListener("click", async () => {
+  const m = b.dataset.mode; if (!DB || m === mode()) return;
+  try { await save(d => { d.vehicle.mode = m; }, `Use ${m} maintenance schedule`); toast(m==="severe"?"Using the severe-duty schedule":"Using the normal schedule"); }
+  catch(e){ toast(e.message); }
+}));
+
+$("odoSave").addEventListener("click", async () => {
+  const v = parseInt($("odoInput").value, 10);
+  const M = model();
+  if (!v || v < 1000) { toast("Enter the full odometer reading in miles"); return; }
+  if (M && v < M.last.miles) { toast(`That's below the last reading (${fmt(M.last.miles)} mi)`); return; }
+  try { $("odoSave").disabled = true; await save(d => { (d.odometer = d.odometer || []).push({ date: iso(today), miles: v }); }, `Odometer ${v}`); $("odoInput").value=""; toast("Odometer reading saved"); }
+  catch(e){ toast(e.message); } finally { $("odoSave").disabled = false; }
+});
+
+function openForm(rec, presetTag, doneBy){
+  S.editing = rec || null;
+  $("formTitle").textContent = rec ? "Edit record" : (doneBy==="diy" ? "Log a DIY job" : "Log a service");
+  const M = model();
+  $("fDate").value = rec?.date || iso(today);
+  $("fMiles").value = rec ? (rec.miles ?? "") : (M ? Math.round(M.est) : "");
+  $("fShop").value = rec?.shop || ""; $("fLoc").value = rec?.location || "";
+  $("fType").value = rec?.type || "service"; $("fCost").value = rec?.cost ?? ""; $("fCost").dataset.touched = "";
+  $("fInv").value = rec?.invoice || ""; $("fNotes").value = rec?.notes || "";
+  const schedNames = new Set(S.schedule.map(s=>s.name));
+  $("fOther").value = rec ? (rec.items||[]).filter(i=>!schedNames.has(i)).join("\n") : "";
+  const tags = new Set(rec?.tags || (presetTag ? [presetTag] : []));
+  $("fChecks").innerHTML = S.schedule.slice().sort((a,b)=>(a.order??0)-(b.order??0)).map(s =>
+    `<label><input type="checkbox" value="${esc(s.key)}" ${s.tags.some(t=>tags.has(t))?"checked":""}>${esc(s.name)}</label>`).join("");
+  $("shops").innerHTML = [...new Set(S.records.map(r=>r.shop))].map(s=>`<option value="${esc(s)}">`).join("");
+  F.doneBy = rec?.doneBy || doneBy || "shop";
+  F.receipts = (rec?.receipts || []).slice();
+  F.fresh = new Set();
+  $("fParts").innerHTML = "";
+  (rec?.parts || []).forEach(addPartRow);
+  $("fHours").value = rec?.hours ?? "";
+  $("readMsg").textContent = "";
+  syncForm();
+  $("fMsg").textContent = "";
+  $("formPanel").hidden = false; $("formPanel").scrollIntoView({behavior:"smooth", block:"start"}); $("fDate").focus({preventScroll:true});
+}
+
+/* ---------- form extras: DIY, parts, receipts ---------- */
+const F = { doneBy: "shop", receipts: [], fresh: new Set(), busy: 0, files: {} };
+function syncForm(){
+  const diy = F.doneBy === "diy";
+  document.querySelectorAll("#doneSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.doneBy === F.doneBy)));
+  $("shopLbl").textContent = diy ? "Where (optional)" : "Shop";
+  $("fShop").placeholder = diy ? "e.g. Home garage" : "e.g. Valvoline Instant Oil Change";
+  $("hrsLbl").hidden = !diy;
+  $("invLbl").firstChild.textContent = diy ? "Store order / receipt #" : "Invoice #";
+  if (diy && !$("fParts").children.length) addPartRow();
+  $("fRcpts").innerHTML = F.receipts.map(x => rcptChip(x, true)).join("");
+  hydrateThumbs();
+  $("readBtn").hidden = !F.receipts.length;
+  $("dropHint").textContent = F.busy ? `Uploading ${F.busy} file${F.busy>1?"s":""} to GitHub…` : "Drop a receipt photo or PDF here, or choose files. They're stored in your private data repo.";
+}
+function addPartRow(p){
+  const d = document.createElement("div"); d.className = "prow";
+  d.innerHTML = `<input type="text" placeholder="Part or fluid" aria-label="Part name" value="${esc(p?.name||"")}">
+    <input type="text" placeholder="Part #" aria-label="Part number" value="${esc(p?.partNo||"")}">
+    <input type="number" placeholder="Qty" aria-label="Quantity" step="0.1" value="${esc(p?.qty??"")}">
+    <input type="number" placeholder="$ cost" aria-label="Cost" step="0.01" value="${esc(p?.cost??"")}">
+    <button type="button" aria-label="Remove part" data-rmpart="1">×</button>`;
+  $("fParts").appendChild(d);
+}
+function readParts(){
+  return [...$("fParts").children].map(r => { const [n,pn,q,c] = r.querySelectorAll("input");
+    return { name: n.value.trim(), partNo: pn.value.trim(), qty: q.value ? Number(q.value) : null, cost: c.value ? Number(c.value) : null }; })
+    .filter(p => p.name || p.partNo);
+}
+document.querySelectorAll("#doneSeg button").forEach(b => b.addEventListener("click", () => { F.doneBy = b.dataset.doneBy; syncForm(); }));
+$("addPart").addEventListener("click", () => addPartRow());
+$("fParts").addEventListener("input", () => {
+  const parts = readParts(); if (!parts.length) return;
+  const sum = parts.reduce((a,p) => a + (p.cost||0)*(p.qty||1), 0);
+  if (F.doneBy === "diy" && sum && !$("fCost").dataset.touched) $("fCost").value = sum.toFixed(2);
+});
+$("fCost").addEventListener("input", () => { $("fCost").dataset.touched = "1"; });
+
+const IMG_OK = ["image/jpeg","image/png","image/webp","image/gif"];
+async function normalizeImage(blob, maxBytes){
+  if (IMG_OK.includes(blob.type) && blob.size <= maxBytes) return blob;
+  const bmp = await createImageBitmap(blob);
+  const k = Math.min(1, 2200 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
+}
+async function uploadFiles(files){
+  if (!DB) { toast("Connect your data repo first (Settings)"); return; }
+  for (const f of files) {
+    let type = f.type || (f.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "");
+    if (!/^image\/|^application\/pdf$/.test(type)) { toast(`${f.name}: only photos and PDFs`); continue; }
+    F.busy++; syncForm();
+    try {
+      let blob = f, name = f.name;
+      if (type.startsWith("image/") && (!IMG_OK.includes(type) || f.size > 8*1024*1024)) {
+        blob = await normalizeImage(f, 8*1024*1024); type = "image/jpeg"; name = name.replace(/\.[^.]+$/, "") + ".jpg";
+      }
+      if (blob.size > 25*1024*1024) { toast(`${f.name} is over 25 MB`); continue; }
+      const safe = name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80);
+      const d = $("fDate").value || iso(today);
+      const path = `receipts/${d.slice(0,4)}/${d}_${Date.now().toString(36)}_${safe}`;
+      await putFile(path, blob, `Receipt: ${name}`);
+      F.receipts.push({ path, name, type, size: blob.size });
+      F.fresh.add(path); F.files[path] = blob;
+      blobCache.set(path, { blob, url: URL.createObjectURL(blob) });
+    } catch (e) { toast(e.message || `Couldn't upload ${f.name}`); }
+    finally { F.busy--; syncForm(); }
+  }
+}
+$("fFiles").addEventListener("change", e => { uploadFiles([...e.target.files]); e.target.value = ""; });
+const drop = $("drop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => uploadFiles([...(e.dataTransfer?.files || [])]));
+document.addEventListener("paste", e => { if ($("formPanel").hidden) return; const fs = [...(e.clipboardData?.files||[])]; if (fs.length) uploadFiles(fs); });
+
+/* receipt reading with your Anthropic API key */
+$("readBtn").addEventListener("click", async () => {
+  if (!CFG.akey) { $("readMsg").innerHTML = `Add your Anthropic API key in <a href="#" data-opensettings="1">Settings</a> to fill forms from receipts.`; return; }
+  const btn = $("readBtn"); btn.disabled = true; $("readMsg").textContent = "Reading the receipt… this can take up to a minute.";
+  try {
+    const content = [];
+    for (const x of F.receipts.slice(0, 5)) {
+      const blob = F.files[x.path] || await fileBlob(x.path);
+      if ((x.type || blob.type) === "application/pdf") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: await b64FromBlob(blob) } });
+      else { const img = await normalizeImage(blob, 3.7*1024*1024); content.push({ type: "image", source: { type: "base64", media_type: img.type, data: await b64FromBlob(img) } }); }
+    }
+    const keys = S.schedule.map(s => `${s.key}: ${s.name}`).join("\n");
+    content.push({ type: "text", text: `These files are a receipt or work order for a 2013 Ford F-350 6.7L diesel pickup. ${F.doneBy==="diy"?"The owner did the work himself; this is likely a parts-store receipt.":"A shop did the work."}
+Extract what is printed. Do not guess values that aren't on the receipt; use null. If several invoices are included, use the most recent one and mention the others in notes.
+Reply with only JSON in this shape:
+{"date":"YYYY-MM-DD"|null,"miles":number|null,"shop":string|null,"location":"City, ST"|null,"invoice":string|null,"total":number|null,
+ "work":[short strings describing work performed or items bought],
+ "parts":[{"name":string,"partNo":string|null,"qty":number|null,"cost":number|null}],
+ "scheduleKeys":[keys from the list below that this receipt shows were done or bought for],
+ "notes":string|null}
+Schedule keys:
+${keys}` });
+    const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST",
+      headers: { "x-api-key": CFG.akey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true", "content-type": "application/json" },
+      body: JSON.stringify({ model: CFG.model || "claude-sonnet-5-5", max_tokens: 2500, messages: [{ role: "user", content }] }) });
+    if (!r.ok) {
+      let m = ""; try { m = (await r.json()).error?.message || ""; } catch(e){}
+      throw new Error(r.status === 401 ? "Your Anthropic API key was rejected. Check it in Settings." : r.status === 429 ? "Too many requests right now. Wait a minute and try again." : r.status === 404 ? `Model not found. Change the model name in Settings. (${m})` : `Receipt reading failed: ${m || r.status}`);
+    }
+    const out = await r.json();
+    const txt = (out.content || []).filter(c => c.type === "text").map(c => c.text).join("");
+    const j = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1));
+    const set = (id, v) => { if (v != null && v !== "") $(id).value = v; };
+    set("fDate", /^\d{4}-\d{2}-\d{2}$/.test(j.date||"") ? j.date : null);
+    set("fMiles", Number.isFinite(j.miles) ? j.miles : null);
+    set("fShop", j.shop); set("fLoc", j.location); set("fInv", j.invoice);
+    if (Number.isFinite(j.total)) { $("fCost").value = j.total.toFixed(2); $("fCost").dataset.touched = "1"; }
+    if (j.notes) set("fNotes", j.notes);
+    const ks = new Set(Array.isArray(j.scheduleKeys) ? j.scheduleKeys : []);
+    $("fChecks").querySelectorAll("input").forEach(i => { if (ks.has(i.value)) i.checked = true; });
+    const schedNames = new Set(S.schedule.filter(s=>ks.has(s.key)).map(s=>s.name.toLowerCase()));
+    const work = (Array.isArray(j.work) ? j.work : []).map(String).filter(w => !schedNames.has(w.toLowerCase()));
+    if (work.length) $("fOther").value = [$("fOther").value.trim(), ...work].filter(Boolean).join("\n");
+    if (Array.isArray(j.parts) && j.parts.length) {
+      [...$("fParts").children].forEach(row => { if (![...row.querySelectorAll("input")].some(i=>i.value)) row.remove(); });
+      j.parts.slice(0, 30).forEach(p => addPartRow({ name: String(p.name||""), partNo: p.partNo||"", qty: p.qty, cost: p.cost }));
+    }
+    $("readMsg").textContent = "Filled in from the receipt. Check the fields, then save.";
+  } catch (e) {
+    $("readMsg").textContent = e instanceof SyntaxError ? "Couldn't make sense of that receipt. Fill the form by hand." : (e.message || "Couldn't read the receipt. Fill the form by hand.");
+  } finally { btn.disabled = false; }
+});
+
+$("addBtn").addEventListener("click", () => openForm(null));
+$("diyBtn").addEventListener("click", () => openForm(null, null, "diy"));
+$("formClose").addEventListener("click", async () => {
+  $("formPanel").hidden = true;
+  for (const p of F.fresh) { try { await deleteFile(p, "Remove unsaved receipt"); } catch(e){} }
+  F.fresh = new Set();
+});
+$("recForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!DB) return;
+  const keys = [...$("fChecks").querySelectorAll("input:checked")].map(i=>i.value);
+  const items = S.schedule.filter(s=>keys.includes(s.key)).map(s=>s.name)
+    .concat($("fOther").value.split("\n").map(s=>s.trim()).filter(Boolean));
+  const parts = readParts();
+  if (F.busy) { $("fMsg").textContent = "Wait for the uploads to finish."; return; }
+  if (!items.length && !parts.length && !F.receipts.length) { $("fMsg").textContent = "Tick an item, add a part, or describe the work done."; return; }
+  if (!items.length) items.push(parts.length ? "Parts purchased / installed" : "See attached receipt");
+  let tags = [...new Set(S.schedule.filter(s=>keys.includes(s.key)).flatMap(s=>s.tags))];
+  if (S.editing) {
+    const schedTags = new Set(S.schedule.flatMap(s=>s.tags));
+    tags = [...new Set([...(S.editing.tags||[]).filter(t=>!schedTags.has(t)), ...tags])];
+  }
+  const miles = $("fMiles").value ? parseInt($("fMiles").value,10) : null;
+  const body = {
+    ...(S.editing || {}), date: $("fDate").value, miles, shop: $("fShop").value.trim() || "Not recorded", location: $("fLoc").value.trim(),
+    type: $("fType").value, cost: $("fCost").value ? Number($("fCost").value) : null, invoice: $("fInv").value.trim(), notes: $("fNotes").value.trim(),
+    items, tags, owner: S.editing?.owner ?? 3, source: S.editing?.source || (F.doneBy==="diy" ? "DIY, added by you" : "Added by you"),
+    doneBy: F.doneBy, parts, receipts: F.receipts, hours: F.doneBy==="diy" && $("fHours").value ? Number($("fHours").value) : null
+  };
+  if (body.shop === "Not recorded" && F.doneBy === "diy") body.shop = "Self (DIY)";
+  const id = S.editing?.id || ("u" + Date.now().toString(36));
+  body.id = id;
+  const editing = !!S.editing;
+  try {
+    $("fSubmit").disabled = true; $("fMsg").textContent = "Saving to GitHub…";
+    await save(d => { const i = d.records.findIndex(r => r.id === id); if (i >= 0) d.records[i] = body; else d.records.push(body); },
+      `${editing ? "Edit" : "Add"}: ${body.date} ${body.items[0]}`.slice(0, 120));
+    F.fresh = new Set(); $("formPanel").hidden = true; toast(editing ? "Record updated" : "Service logged");
+  } catch(err){ $("fMsg").textContent = err.message || "Couldn't save. Check your connection and try again."; }
+  finally { $("fSubmit").disabled = false; }
+});
+
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-done],[data-edit],[data-del],[data-delyes],[data-delno],[data-rmpart],[data-rmrcpt],[data-open],[data-opensettings]");
+  if (!t) return;
+  if (t.dataset.open) { e.preventDefault(); openFile(t.dataset.open); return; }
+  if (t.dataset.opensettings) { e.preventDefault(); openSettings(); return; }
+  if (t.dataset.rmpart) { t.closest(".prow").remove(); return; }
+  if (t.dataset.rmrcpt) {
+    const p = t.dataset.rmrcpt; F.receipts = F.receipts.filter(x => x.path !== p);
+    if (F.fresh.has(p)) { F.fresh.delete(p); try { await deleteFile(p, "Remove unsaved receipt"); } catch(e){} }
+    syncForm(); return;
+  }
+  if (t.dataset.done) openForm(null, t.dataset.done);
+  else if (t.dataset.edit) openForm(S.records.find(r=>r.id===t.dataset.edit));
+  else if (t.dataset.del) { const w = document.querySelector(`[data-delwrap="${t.dataset.del}"]`); w.innerHTML = `<span class="confirm">Delete this record? <button class="btn small danger" data-delyes="${esc(t.dataset.del)}">Delete</button><button class="btn small" data-delno="1">Keep</button></span>`; }
+  else if (t.dataset.delno) { render(); hydrateThumbs(); }
+  else if (t.dataset.delyes) {
+    const id = t.dataset.delyes, rec = S.records.find(r => r.id === id);
+    try {
+      await save(d => { d.records = d.records.filter(r => r.id !== id); }, `Delete: ${rec?.date || ""} ${rec?.items?.[0] || id}`.slice(0,120));
+      toast("Record deleted");
+      const still = new Set(S.records.flatMap(r => (r.receipts||[]).map(x => x.path)).concat((S.vehicle?.docs||[]).map(d => d.path)));
+      for (const x of rec?.receipts || []) if (x.path && !still.has(x.path)) { try { await deleteFile(x.path, "Delete receipt with its record"); } catch(err){} }
+    } catch(err){ toast(err.message); }
+  }
+});
+
+function download(name, text, type){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+$("exportBtn").addEventListener("click", () => {
+  const cols = ["date","miles","type","doneBy","owner","shop","location","items","parts","cost","invoice","notes","checks","source"];
+  const q = v => `"${String(v ?? "").replace(/"/g,'""')}"`;
+  const rows = S.records.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r => cols.map(c =>
+    q(c==="items" ? (r.items||[]).concat(r.lines||[]).join("; ") : c==="parts" ? (r.parts||[]).map(p=>[p.name,p.partNo,p.qty?p.qty+"x":"",p.cost!=null?"$"+p.cost:""].filter(Boolean).join(" ")).join("; ") : r[c])).join(","));
+  download("F350_maintenance_history.csv", [cols.join(","), ...rows].join("\n"), "text/csv");
+});
+
+/* ---------- settings ---------- */
+function openSettings(){
+  $("sOwner").value = CFG.owner || "scottmcconnell1-bot";
+  $("sRepo").value = CFG.repo || "f350-service-data";
+  $("sBranch").value = CFG.branch || "main";
+  $("sToken").value = CFG.token || "";
+  $("sAkey").value = CFG.akey || "";
+  $("sModel").value = CFG.model || "claude-sonnet-5-5";
+  $("sMsg").textContent = "";
+  $("signOut").hidden = !CFG.token;
+  $("settings").hidden = false; $("settings").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+$("settingsBtn").addEventListener("click", () => $("settings").hidden ? openSettings() : ($("settings").hidden = true));
+$("sClose").addEventListener("click", () => { $("settings").hidden = true; });
+$("setForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const prev = CFG;
+  CFG = { owner: $("sOwner").value.trim(), repo: $("sRepo").value.trim(), branch: $("sBranch").value.trim() || "main",
+          token: $("sToken").value.trim(), akey: $("sAkey").value.trim(), model: $("sModel").value.trim() || "claude-sonnet-5-5" };
+  $("sMsg").textContent = "Connecting to GitHub…";
+  try {
+    await loadDb();
+    try { localStorage.setItem(CFG_KEY, JSON.stringify(CFG)); } catch(err){}
+    $("settings").hidden = true; S.canWrite = true; render(); hydrateThumbs(); toast("Connected to your data repo");
+  } catch (err) { CFG = prev; $("sMsg").textContent = err.message; }
+});
+$("signOut").addEventListener("click", () => {
+  try { localStorage.removeItem(CFG_KEY); localStorage.removeItem(CACHE_KEY); } catch(e){}
+  CFG = {}; DB = null; SHA = null; S.records = []; S.schedule = []; S.odometer = []; S.vehicle = null; S.canWrite = false;
+  $("settings").hidden = true; render(); showSetup(); toast("Signed out on this device");
+});
+function showSetup(){
+  $("items").innerHTML = `<div class="empty">Connect your private data repo to see your maintenance records. <br><br><button class="btn primary" data-opensettings="1">Open Settings</button></div>`;
+  $("history").innerHTML = `<div class="empty">Not connected yet.</div>`;
+  $("visits").innerHTML = "";
+}
+
+/* ---------- boot ---------- */
+async function boot(){
+  try { const t = localStorage.getItem("f350tab"); if (t && t!=="upcoming") $("tab-"+t)?.click(); } catch(e){}
+  if (!CFG.token) { render(); showSetup(); openSettings(); return; }
+  S.canWrite = true;
+  try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); if (c) { DB = c; applyDb(); } } catch(e){}
+  render();
+  try { await loadDb(); hydrateThumbs(); }
+  catch (e) { toast(e.message); if (!DB) { showSetup(); } }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && CFG.token && $("formPanel").hidden) loadDb().then(hydrateThumbs).catch(()=>{}); });
+boot();
+})();
+
+</script>
+</body>
+</html>
