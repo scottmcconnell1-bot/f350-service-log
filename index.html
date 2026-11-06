@@ -175,6 +175,19 @@ td.num{white-space:nowrap}
 .ptable{font-size:13px;border-collapse:collapse;min-width:0;width:auto}
 .ptable td{padding:2px 12px 2px 0;border:0}
 .pill.diy{background:var(--sunk);color:var(--accent);border:1px solid var(--accent)}
+.fcard{display:grid;grid-template-columns:44px minmax(0,1fr);gap:4px 12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.fcard .ficon{grid-row:1/5;width:44px;height:52px;border-radius:5px;display:grid;place-items:center;font-family:var(--mono);font-size:11px;font-weight:700;background:var(--sunk);color:var(--muted)}
+.fcard .ficon.pdf{color:var(--over)} .fcard .ficon.note{color:var(--accent)}
+.fcard h3{font-family:var(--body);font-size:15px;font-weight:600}
+.fcard .fmeta{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.fcard .fnotes{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.fcard .tagrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.review{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:10px}
+.rv{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 10px;align-items:start;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.rv.skip{opacity:.6}
+.rv .rvt{font-weight:600}
+.rv .rvm{font-size:13px;color:var(--muted)}
+.rv select{font-size:13px;padding:4px 6px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-weight:600;z-index:20}
 .empty{padding:28px 10px;text-align:center;color:var(--muted)}
 .confirm{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--over)}
@@ -214,6 +227,7 @@ td.num{white-space:nowrap}
     <div class="tabs" role="tablist">
       <button role="tab" id="tab-upcoming" aria-selected="true" data-tab="upcoming">Upcoming</button>
       <button role="tab" id="tab-history" aria-selected="false" data-tab="history">History</button>
+      <button role="tab" id="tab-files" aria-selected="false" data-tab="files">Files</button>
       <button role="tab" id="tab-schedule" aria-selected="false" data-tab="schedule">Schedule</button>
     </div>
     <div class="search">
@@ -263,6 +277,7 @@ td.num{white-space:nowrap}
       </div>
       <div class="rcpts" id="fRcpts"></div>
       <div class="muted" id="readMsg" style="font-size:13px"></div>
+      <div class="review" id="docReview" hidden></div>
     </div>
     <form id="recForm" class="grid">
       <div class="full row"><span class="eyebrow">Who did the work</span>
@@ -326,6 +341,32 @@ td.num{white-space:nowrap}
     <div id="history"><div class="empty">Loading history…</div></div>
   </main>
 
+  <main id="view-files" hidden>
+    <div class="filters" style="margin-bottom:6px">
+      <select id="fileCat" aria-label="Category"><option value="all">All categories</option></select>
+      <span class="muted" id="fileCount"></span>
+      <span style="flex:1"></span>
+      <button class="btn primary small" id="addFileBtn" hidden>+ Add file or note</button>
+    </div>
+    <section class="panel formcard" id="filePanel" hidden>
+      <div class="row" style="justify-content:space-between"><h2 id="fileFormTitle">Add a file or note</h2><button class="btn small" id="fileClose" type="button">Close</button></div>
+      <form id="fileForm" class="grid">
+        <label class="wide">Title<input type="text" id="ffTitle" required placeholder="e.g. Wiring diagrams from A1 Speedomotive"></label>
+        <label>Category<select id="ffCat"></select></label>
+        <label>Date<input type="date" id="ffDate"></label>
+        <label class="full">Notes<textarea id="ffNotes" style="min-height:110px" placeholder="Anything worth keeping: what it is, part numbers, what the shop said, torque specs…"></textarea></label>
+        <div class="full">
+          <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="eyebrow">Attachments (optional)</span>
+            <span class="row"><label class="btn small" for="ffFiles">Choose files</label><input type="file" id="ffFiles" accept="image/*,application/pdf" multiple hidden></span></div>
+          <div class="rcpts" id="ffRcpts"></div><div class="muted" id="ffUp" style="font-size:13px"></div>
+        </div>
+        <label class="wide">Related service record (optional)<select id="ffRel"><option value="">None</option></select></label>
+        <div class="full row"><button class="btn primary" type="submit" id="ffSubmit">Save</button><span class="muted" id="ffMsg"></span></div>
+      </form>
+    </section>
+    <div id="filesList"><div class="empty">Loading files…</div></div>
+  </main>
+
   <main id="view-schedule" hidden>
     <section class="panel">
       <h2>Ford schedule for the 6.7L diesel</h2>
@@ -341,7 +382,7 @@ td.num{white-space:nowrap}
 (() => {
 const $ = id => document.getElementById(id);
 const DAY = 864e5;
-const S = { records: [], schedule: [], odometer: [], vehicle: null, tab: "upcoming", type: "service", owner: "all", q: "", canWrite: false, editing: null };
+const S = { records: [], files: [], schedule: [], odometer: [], vehicle: null, tab: "upcoming", type: "service", owner: "all", q: "", canWrite: false, editing: null };
 
 const fmt = n => n == null ? "—" : Math.round(n).toLocaleString("en-US");
 const parseD = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
@@ -526,7 +567,9 @@ function renderUpcoming(M){
   const egr = S.records.find(r => r.tags?.includes("egr_program"));
   const eng = S.records.find(r => r.tags?.includes("engine_replaced"));
   const notes = [];
-  if (egr) notes.push(`<b>Open Ford program:</b> 21M04 EGR cooler (issued Jan 2022), with no completion on record. Call a Ford dealer with your VIN.`);
+  const egrDone = S.records.find(r => r.tags?.includes("egr_cooler"));
+  if (egr && egrDone) notes.push(`<b>Ford program 21M04 (EGR cooler):</b> ${esc(egrDone.shop)} replaced the EGR cooler on ${fmtD(parseD(egrDone.date))}. Ask a Ford dealer whether the program is closed for your VIN and whether that repair can be reimbursed.`);
+  else if (egr) notes.push(`<b>Open Ford program:</b> 21M04 EGR cooler (issued Jan 2022), with no completion on record. Call a Ford dealer with your VIN.`);
   if (eng) notes.push(`<b>Engine:</b> long block replaced Jul 2022 at ${fmt(eng.miles)} mi, so the engine itself has about ${M?fmt(M.est-eng.miles):"—"} mi.`);
   notes.push(`<b>Tire pressure:</b> Valvoline logged 50/50 psi in Dec 2025 versus 65/80 in Aug 2025. Check the door-jamb placard, since heavy-duty trucks usually run higher pressures.`);
   $("openItems").innerHTML = notes.join("<br>");
@@ -556,7 +599,8 @@ function renderHistory(){
         <ul>${(r.items||[]).map(i=>`<li>${hl(i)}</li>`).join("")}</ul>
         ${(r.parts||[]).length ? `<div style="overflow-x:auto"><table class="ptable"><tbody>${r.parts.map(p=>`<tr><td>${hl(p.name)}</td><td class="num muted">${hl(p.partNo||"")}</td><td class="num">${p.qty?esc(p.qty)+"×":""}</td><td class="num">${p.cost!=null&&p.cost!==""?"$"+Number(p.cost).toFixed(2):""}</td></tr>`).join("")}</tbody></table></div>` : ""}
         ${r.hours ? `<div class="lines"><b>Your time:</b> ${esc(r.hours)} h</div>` : ""}
-        ${(r.receipts||[]).length ? `<div class="rcpts">${r.receipts.map(rcptChip).join("")}</div>` : ""}
+        ${(r.receipts||[]).length ? `<div class="rcpts">${r.receipts.map(x => rcptChip(x)).join("")}</div>` : ""}
+        ${(S.files||[]).some(f => f.related === r.id) ? `<div class="lines"><b>Related files:</b> ${(S.files||[]).filter(f => f.related === r.id).map(f => esc(f.title)).join(" · ")}</div>` : ""}
         ${(r.lines||[]).length ? `<div class="lines">${r.lines.map(hl).join("<br>")}</div>` : ""}
         ${r.checks ? `<div class="lines"><b>Checks:</b> ${hl(r.checks)}</div>` : ""}
         ${r.notes ? `<div class="lines"><b>Note:</b> ${hl(r.notes)}</div>` : ""}
@@ -583,6 +627,7 @@ function render(){
   if (S.tab==="upcoming") renderUpcoming(M);
   if (S.tab==="history") renderHistory();
   if (S.tab==="schedule") renderSchedule();
+  if (S.tab==="files") renderFiles();
   setTimeout(hydrateThumbs, 0);
   if (S.tab!=="upcoming") { const ev = S.schedule.map(i=>evaluate(i,M)); $("tOver").textContent = S.schedule.length?ev.filter(e=>e.status==="over").length:"–"; $("tSoon").textContent = S.schedule.length?ev.filter(e=>e.status==="soon").length:"–"; }
 }
@@ -625,7 +670,7 @@ async function loadDb(){
   applyDb();
 }
 function applyDb(){
-  S.records = DB.records || []; S.schedule = DB.schedule || []; S.odometer = DB.odometer || []; S.vehicle = DB.vehicle || null;
+  S.records = DB.records || []; S.files = DB.files || []; S.schedule = DB.schedule || []; S.odometer = DB.odometer || []; S.vehicle = DB.vehicle || null;
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(DB)); } catch(e){}
   render();
 }
@@ -681,7 +726,7 @@ function openFile(path){
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
   S.tab = b.dataset.tab;
   document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", String(x===b)));
-  ["upcoming","history","schedule"].forEach(t => $("view-"+t).hidden = t!==S.tab);
+  ["upcoming","history","files","schedule"].forEach(t => $("view-"+t).hidden = t!==S.tab);
   try { localStorage.setItem("f350tab", S.tab); } catch(e){}
   render(); hydrateThumbs();
 }));
@@ -785,6 +830,7 @@ function openForm(rec, presetTag, doneBy){
   (rec?.parts || []).forEach(addPartRow);
   $("fHours").value = rec?.hours ?? "";
   $("readMsg").textContent = "";
+  RV.docs = []; RV.sources = []; renderReview();
   syncForm();
   $("fMsg").textContent = "";
   $("formPanel").hidden = false; $("formPanel").scrollIntoView({behavior:"smooth", block:"start"}); $("fDate").focus({preventScroll:true});
@@ -867,59 +913,6 @@ const drop = $("drop");
 drop.addEventListener("drop", e => uploadFiles([...(e.dataTransfer?.files || [])]));
 document.addEventListener("paste", e => { if ($("formPanel").hidden) return; const fs = [...(e.clipboardData?.files||[])]; if (fs.length) uploadFiles(fs); });
 
-/* receipt reading with your Anthropic API key */
-$("readBtn").addEventListener("click", async () => {
-  if (!CFG.akey) { $("readMsg").innerHTML = `Add your Anthropic API key in <a href="#" data-opensettings="1">Settings</a> to fill forms from receipts.`; return; }
-  const btn = $("readBtn"); btn.disabled = true; $("readMsg").textContent = "Reading the receipt… this can take up to a minute.";
-  try {
-    const content = [];
-    for (const x of F.receipts.slice(0, 5)) {
-      const blob = F.files[x.path] || await fileBlob(x.path);
-      if ((x.type || blob.type) === "application/pdf") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: await b64FromBlob(blob) } });
-      else { const img = await normalizeImage(blob, 3.7*1024*1024); content.push({ type: "image", source: { type: "base64", media_type: img.type, data: await b64FromBlob(img) } }); }
-    }
-    const keys = S.schedule.map(s => `${s.key}: ${s.name}`).join("\n");
-    content.push({ type: "text", text: `These files are a receipt or work order for a 2013 Ford F-350 6.7L diesel pickup. ${F.doneBy==="diy"?"The owner did the work himself; this is likely a parts-store receipt.":"A shop did the work."}
-Extract what is printed. Do not guess values that aren't on the receipt; use null. If several invoices are included, use the most recent one and mention the others in notes.
-Reply with only JSON in this shape:
-{"date":"YYYY-MM-DD"|null,"miles":number|null,"shop":string|null,"location":"City, ST"|null,"invoice":string|null,"total":number|null,
- "work":[short strings describing work performed or items bought],
- "parts":[{"name":string,"partNo":string|null,"qty":number|null,"cost":number|null}],
- "scheduleKeys":[keys from the list below that this receipt shows were done or bought for],
- "notes":string|null}
-Schedule keys:
-${keys}` });
-    const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST",
-      headers: { "x-api-key": CFG.akey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true", "content-type": "application/json" },
-      body: JSON.stringify({ model: CFG.model || "claude-sonnet-5-5", max_tokens: 2500, messages: [{ role: "user", content }] }) });
-    if (!r.ok) {
-      let m = ""; try { m = (await r.json()).error?.message || ""; } catch(e){}
-      throw new Error(r.status === 401 ? `Anthropic rejected the API key (${m || "invalid x-api-key"}). Open Settings and use Test key.` : r.status === 429 ? "Too many requests right now. Wait a minute and try again." : r.status === 404 ? `Model not found. Change the model name in Settings. (${m})` : `Receipt reading failed: ${m || r.status}`);
-    }
-    const out = await r.json();
-    const txt = (out.content || []).filter(c => c.type === "text").map(c => c.text).join("");
-    const j = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1));
-    const set = (id, v) => { if (v != null && v !== "") $(id).value = v; };
-    set("fDate", /^\d{4}-\d{2}-\d{2}$/.test(j.date||"") ? j.date : null);
-    set("fMiles", Number.isFinite(j.miles) ? j.miles : null);
-    set("fShop", j.shop); set("fLoc", j.location); set("fInv", j.invoice);
-    if (Number.isFinite(j.total)) { $("fCost").value = j.total.toFixed(2); $("fCost").dataset.touched = "1"; }
-    if (j.notes) set("fNotes", j.notes);
-    const ks = new Set(Array.isArray(j.scheduleKeys) ? j.scheduleKeys : []);
-    $("fChecks").querySelectorAll("input").forEach(i => { if (ks.has(i.value)) i.checked = true; });
-    const schedNames = new Set(S.schedule.filter(s=>ks.has(s.key)).map(s=>s.name.toLowerCase()));
-    const work = (Array.isArray(j.work) ? j.work : []).map(String).filter(w => !schedNames.has(w.toLowerCase()));
-    if (work.length) $("fOther").value = [$("fOther").value.trim(), ...work].filter(Boolean).join("\n");
-    if (Array.isArray(j.parts) && j.parts.length) {
-      [...$("fParts").children].forEach(row => { if (![...row.querySelectorAll("input")].some(i=>i.value)) row.remove(); });
-      j.parts.slice(0, 30).forEach(p => addPartRow({ name: String(p.name||""), partNo: p.partNo||"", qty: p.qty, cost: p.cost }));
-    }
-    $("readMsg").textContent = "Filled in from the receipt. Check the fields, then save.";
-  } catch (e) {
-    $("readMsg").textContent = e instanceof SyntaxError ? "Couldn't make sense of that receipt. Fill the form by hand." : (e.message || "Couldn't read the receipt. Fill the form by hand.");
-  } finally { btn.disabled = false; }
-});
-
 $("addBtn").addEventListener("click", () => openForm(null));
 $("diyBtn").addEventListener("click", () => openForm(null, null, "diy"));
 $("formClose").addEventListener("click", async () => {
@@ -1000,6 +993,306 @@ $("exportBtn").addEventListener("click", () => {
   download("F350_maintenance_history.csv", [cols.join(","), ...rows].join("\n"), "text/csv");
 });
 
+/* ---------- Files: documents and notes ---------- */
+const FILE_CATS = ["Diagnostic report", "Wiring & repair info", "Recommendation / estimate", "Manual", "Warranty / recall", "Purchase & title", "Note", "Other"];
+const KIND_CAT = { diagnostic: "Diagnostic report", recommendation: "Recommendation / estimate", reference: "Wiring & repair info", other: "Other", marketing: "Other" };
+$("ffCat").innerHTML = FILE_CATS.map(c => `<option>${esc(c)}</option>`).join("");
+$("fileCat").innerHTML = `<option value="all">All categories</option>` + FILE_CATS.map(c => `<option>${esc(c)}</option>`).join("");
+const slug = t => String(t || "file").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60) || "file";
+const fileText = f => [f.title, f.category, f.date, f.notes, ...(f.files||[]).map(x => x.name), relLabel(f.related)].join(" ").toLowerCase();
+function relLabel(id){ const r = id && S.records.find(x => x.id === id); return r ? `${fmtD(parseD(r.date))} · ${r.shop}` : ""; }
+
+function renderFiles(){
+  const cat = $("fileCat").value;
+  let list = (S.files || []).slice().sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.added||"").localeCompare(a.added||""));
+  if (cat !== "all") list = list.filter(f => f.category === cat);
+  list = list.filter(f => matchQ(fileText(f)));
+  $("fileCount").textContent = `${list.length} item${list.length===1?"":"s"}`;
+  $("addFileBtn").hidden = !S.canWrite;
+  if (!(S.files||[]).length) { $("filesList").innerHTML = `<div class="empty">No files or notes yet. Use “+ Add file or note” for manuals, wiring diagrams, scan reports, estimates or anything you want to keep.</div>`; return; }
+  if (!list.length) { $("filesList").innerHTML = `<div class="empty">Nothing matches. Clear the search or pick “All categories”.</div>`; return; }
+  $("filesList").innerHTML = list.map(f => {
+    const first = (f.files||[])[0];
+    const icon = !first ? `<div class="ficon note">NOTE</div>` : (first.type||"").startsWith("image/") ? `<div class="ficon">IMG</div>` : `<div class="ficon pdf">PDF</div>`;
+    return `<article class="fcard">${icon}
+      <h3>${hl(f.title)}</h3>
+      <div class="fmeta"><span class="chip">${hl(f.category||"Other")}</span>${f.date ? `<span class="num">${hl(fmtD(parseD(f.date)))}</span>` : ""}${f.related ? `<a href="#" data-goto="${esc(f.related)}">Related: ${hl(relLabel(f.related))}</a>` : ""}</div>
+      ${f.notes ? `<div class="fnotes">${hl(f.notes)}</div>` : ""}
+      <div class="tagrow">${(f.files||[]).map(x => rcptChip(x)).join("")}
+        ${S.canWrite ? `<span style="flex:1"></span><button class="btn small" data-fedit="${esc(f.id)}">Edit</button><span data-fdelwrap="${esc(f.id)}"><button class="btn small danger" data-fdel="${esc(f.id)}">Delete</button></span>` : ""}</div>
+    </article>`;
+  }).join("");
+}
+$("fileCat").addEventListener("change", () => { renderFiles(); hydrateThumbs(); });
+
+const FF = { editing: null, files: [], fresh: new Set(), busy: 0 };
+function openFileForm(f){
+  FF.editing = f || null; FF.files = (f?.files || []).slice(); FF.fresh = new Set();
+  $("fileFormTitle").textContent = f ? "Edit file or note" : "Add a file or note";
+  $("ffTitle").value = f?.title || ""; $("ffCat").value = f?.category || "Note"; $("ffDate").value = f?.date || iso(today); $("ffNotes").value = f?.notes || "";
+  $("ffRel").innerHTML = `<option value="">None</option>` + S.records.filter(r => r.type === "service").sort((a,b) => b.date.localeCompare(a.date)).slice(0, 60)
+    .map(r => `<option value="${esc(r.id)}">${esc(fmtD(parseD(r.date)))} · ${esc(r.shop)} · ${esc((r.items||[])[0]||"")}</option>`).join("");
+  $("ffRel").value = f?.related || "";
+  $("ffMsg").textContent = ""; syncFileForm();
+  $("filePanel").hidden = false; $("filePanel").scrollIntoView({ behavior: "smooth", block: "start" }); $("ffTitle").focus({ preventScroll: true });
+}
+function syncFileForm(){
+  $("ffRcpts").innerHTML = FF.files.map(x => rcptChip(x, true).replace("data-rmrcpt=", "data-ffrm=")).join("");
+  $("ffUp").textContent = FF.busy ? `Uploading ${FF.busy} file${FF.busy>1?"s":""}…` : "";
+  hydrateThumbs();
+}
+async function uploadToFiles(list, dateStr){
+  for (const f of list) {
+    let type = f.type || (f.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "");
+    if (!/^image\/|^application\/pdf$/.test(type)) { toast(`${f.name}: only photos and PDFs`); continue; }
+    FF.busy++; syncFileForm();
+    try {
+      let blob = f, name = f.name;
+      if (type.startsWith("image/") && (!IMG_OK.includes(type) || f.size > 8*1024*1024)) { blob = await normalizeImage(f, 8*1024*1024); type = "image/jpeg"; name = name.replace(/\.[^.]+$/, "") + ".jpg"; }
+      if (blob.size > 25*1024*1024) { toast(`${f.name} is over 25 MB`); continue; }
+      const d = dateStr || iso(today);
+      const path = `files/${d.slice(0,4)}/${d}_${Date.now().toString(36)}_${name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80)}`;
+      await putFile(path, blob, `File: ${name}`);
+      FF.files.push({ path, name, type, size: blob.size }); FF.fresh.add(path);
+      blobCache.set(path, { blob, url: URL.createObjectURL(blob) });
+    } catch (e) { toast(e.message || `Couldn't upload ${f.name}`); }
+    finally { FF.busy--; syncFileForm(); }
+  }
+}
+$("addFileBtn").addEventListener("click", () => openFileForm(null));
+$("ffFiles").addEventListener("change", e => { uploadToFiles([...e.target.files], $("ffDate").value); e.target.value = ""; });
+$("filePanel").addEventListener("dragover", e => e.preventDefault());
+$("filePanel").addEventListener("drop", e => { e.preventDefault(); uploadToFiles([...(e.dataTransfer?.files || [])], $("ffDate").value); });
+$("fileClose").addEventListener("click", async () => {
+  $("filePanel").hidden = true;
+  for (const p of FF.fresh) { try { await deleteFile(p, "Remove unsaved file"); } catch(e){} }
+  FF.fresh = new Set();
+});
+$("ffRcpts").addEventListener("click", async e => {
+  const t = e.target.closest("[data-ffrm]"); if (!t) return;
+  const p = t.dataset.ffrm; FF.files = FF.files.filter(x => x.path !== p);
+  if (FF.fresh.has(p)) { FF.fresh.delete(p); try { await deleteFile(p, "Remove unsaved file"); } catch(err){} }
+  syncFileForm();
+});
+$("fileForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (FF.busy) { $("ffMsg").textContent = "Wait for the uploads to finish."; return; }
+  const title = $("ffTitle").value.trim();
+  if (!title) { $("ffMsg").textContent = "Give it a title."; return; }
+  const item = { ...(FF.editing || {}), id: FF.editing?.id || ("f" + Date.now().toString(36)), title, category: $("ffCat").value, date: $("ffDate").value || null,
+    notes: $("ffNotes").value.trim(), files: FF.files, related: $("ffRel").value || null, added: FF.editing?.added || new Date().toISOString() };
+  const editing = !!FF.editing;
+  try {
+    $("ffSubmit").disabled = true; $("ffMsg").textContent = "Saving to GitHub…";
+    await save(d => { d.files = d.files || []; const i = d.files.findIndex(x => x.id === item.id); if (i >= 0) d.files[i] = item; else d.files.push(item); }, `${editing ? "Edit" : "Add"} file: ${title}`.slice(0, 120));
+    FF.fresh = new Set(); $("filePanel").hidden = true; toast(editing ? "Saved" : "Added to Files");
+  } catch (err) { $("ffMsg").textContent = err.message; }
+  finally { $("ffSubmit").disabled = false; }
+});
+$("filesList").addEventListener("click", async e => {
+  const t = e.target.closest("[data-fedit],[data-fdel],[data-fdelyes],[data-fdelno]"); if (!t) return;
+  if (t.dataset.fedit) openFileForm(S.files.find(f => f.id === t.dataset.fedit));
+  else if (t.dataset.fdel) { document.querySelector(`[data-fdelwrap="${t.dataset.fdel}"]`).innerHTML = `<span class="confirm">Delete? <button class="btn small danger" data-fdelyes="${esc(t.dataset.fdel)}">Delete</button><button class="btn small" data-fdelno="1">Keep</button></span>`; }
+  else if (t.dataset.fdelno) renderFiles();
+  else if (t.dataset.fdelyes) {
+    const id = t.dataset.fdelyes, f = S.files.find(x => x.id === id);
+    try {
+      await save(d => { d.files = (d.files||[]).filter(x => x.id !== id); }, `Delete file: ${f?.title || id}`.slice(0,120));
+      toast("Deleted");
+      const still = new Set([...S.records.flatMap(r => (r.receipts||[]).map(x => x.path)), ...(S.files||[]).flatMap(x => (x.files||[]).map(y => y.path)), ...(S.vehicle?.docs||[]).map(x => x.path)]);
+      for (const x of f?.files || []) if (!still.has(x.path)) { try { await deleteFile(x.path, "Delete file attachment"); } catch(err){} }
+    } catch (err) { toast(err.message); }
+  }
+});
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-goto]"); if (!t) return; e.preventDefault();
+  const r = S.records.find(x => x.id === t.dataset.goto); if (!r) return;
+  $("q").value = r.invoice || r.date; S.q = $("q").value; S.type = "all"; S.owner = "all"; $("ownerSel").value = "all";
+  document.querySelectorAll("#typeSeg button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.type === "all")));
+  $("tab-history").click();
+});
+
+/* ---------- reading receipts: one or many documents per upload ---------- */
+let pdfLibReady = null;
+function loadPdfLib(){
+  if (pdfLibReady) return pdfLibReady;
+  pdfLibReady = new Promise((ok, bad) => { const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"; s.onload = () => ok(window.PDFLib); s.onerror = bad; document.head.appendChild(s); });
+  pdfLibReady.catch(() => { pdfLibReady = null; });
+  return pdfLibReady;
+}
+async function extractPages(blob, pages){
+  const lib = await loadPdfLib();
+  const src = await lib.PDFDocument.load(await blob.arrayBuffer(), { ignoreEncryption: true });
+  const n = src.getPageCount();
+  const idx = [...new Set(pages.map(p => p - 1))].filter(i => i >= 0 && i < n).sort((a,b) => a-b);
+  if (!idx.length || idx.length === n) return null;
+  const out = await lib.PDFDocument.create();
+  (await out.copyPages(src, idx)).forEach(p => out.addPage(p));
+  return new Blob([await out.save()], { type: "application/pdf" });
+}
+async function callClaude(content, maxTokens){
+  const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST",
+    headers: { "x-api-key": CFG.akey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true", "content-type": "application/json" },
+    body: JSON.stringify({ model: CFG.model || "claude-sonnet-5-5", max_tokens: maxTokens, messages: [{ role: "user", content }] }) });
+  if (!r.ok) {
+    let m = ""; try { m = (await r.json()).error?.message || ""; } catch(e){}
+    throw new Error(r.status === 401 ? `Anthropic rejected the API key (${m || "invalid x-api-key"}). Open Settings and use Test key.` : r.status === 429 ? "Too many requests right now. Wait a minute and try again." : r.status === 404 ? `Model not found. Change the model name in Settings. (${m})` : `Receipt reading failed: ${m || r.status}`);
+  }
+  const out = await r.json();
+  const txt = (out.content || []).filter(c => c.type === "text").map(c => c.text).join("");
+  return JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1));
+}
+function fillFormFrom(j){
+  const set = (id, v) => { if (v != null && v !== "") $(id).value = v; };
+  set("fDate", /^\d{4}-\d{2}-\d{2}$/.test(j.date||"") ? j.date : null);
+  set("fMiles", Number.isFinite(j.miles) ? j.miles : null);
+  set("fShop", j.shop); set("fLoc", j.location); set("fInv", j.invoice);
+  if (Number.isFinite(j.total)) { $("fCost").value = j.total.toFixed(2); $("fCost").dataset.touched = "1"; }
+  if (j.notes || j.summary) set("fNotes", [j.summary, j.notes].filter(Boolean).join(" "));
+  if (j.kind === "parts_receipt" && F.doneBy !== "diy") { F.doneBy = "diy"; syncForm(); }
+  const ks = new Set(Array.isArray(j.scheduleKeys) ? j.scheduleKeys : []);
+  $("fChecks").querySelectorAll("input").forEach(i => { if (ks.has(i.value)) i.checked = true; });
+  const schedNames = new Set(S.schedule.filter(s=>ks.has(s.key)).map(s=>s.name.toLowerCase()));
+  const work = (Array.isArray(j.work) ? j.work : []).map(String).filter(w => !schedNames.has(w.toLowerCase()));
+  if (work.length) $("fOther").value = [$("fOther").value.trim(), ...work].filter(Boolean).join("\n");
+  if (Array.isArray(j.parts) && j.parts.length) {
+    [...$("fParts").children].forEach(row => { if (![...row.querySelectorAll("input")].some(i=>i.value)) row.remove(); });
+    j.parts.slice(0, 30).forEach(p => addPartRow({ name: String(p.name||""), partNo: p.partNo||"", qty: p.qty, cost: p.cost }));
+  }
+}
+function findDuplicate(d){
+  const inv = String(d.invoice || "").replace(/\D/g, "");
+  return S.records.find(r => (inv && String(r.invoice||"").replace(/\D/g, "") === inv) ||
+    (d.date && r.date === d.date && d.shop && r.shop && r.shop.toLowerCase().split(/\s+/)[0] === String(d.shop).toLowerCase().split(/\s+/)[0] && r.type === "service"));
+}
+const RV = { docs: [], sources: [] };
+function defaultAction(d){
+  if (findDuplicate(d) && (d.kind === "service" || d.kind === "parts_receipt")) return "skip";
+  return d.kind === "service" ? "shop" : d.kind === "parts_receipt" ? "diy" : (d.kind === "blank" || d.kind === "marketing") ? "skip" : "file";
+}
+function renderReview(){
+  const box = $("docReview");
+  if (!RV.docs.length) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = `<div class="row" style="justify-content:space-between"><b>Found ${RV.docs.length} documents in this upload</b><span class="muted" style="font-size:13px">Pick what to do with each, then create them all at once.</span></div>` +
+    RV.docs.map((d, i) => {
+      const dup = findDuplicate(d);
+      const meta = [d.date ? fmtD(parseD(d.date)) : null, d.miles ? fmt(d.miles) + " mi" : null, Number.isFinite(d.total) ? "$" + d.total.toFixed(2) : null, d.invoice ? "inv " + d.invoice : null, `page${(d.pages||[]).length > 1 ? "s" : ""} ${(d.pages||[]).join(", ")}${RV.sources.length > 1 ? ` of file ${d.file||1}` : ""}`].filter(Boolean).join(" · ");
+      return `<div class="rv ${d.action === "skip" ? "skip" : ""}">
+        <span class="chip">${esc(d.kind || "other")}</span>
+        <div><div class="rvt">${esc(d.title || d.shop || "Document")}</div><div class="rvm">${esc(meta)}</div>
+          ${d.summary ? `<div class="rvm">${esc(d.summary)}</div>` : ""}
+          ${dup ? `<div class="rvm" style="color:var(--soon)">Looks like it's already in your history: ${esc(fmtD(parseD(dup.date)))} · ${esc(dup.shop)}</div>` : ""}</div>
+        <div class="row" style="flex-direction:column;align-items:flex-end;gap:4px">
+          <select data-rvact="${i}" aria-label="What to do with this document">
+            <option value="shop" ${d.action==="shop"?"selected":""}>Shop service record</option>
+            <option value="diy" ${d.action==="diy"?"selected":""}>DIY record</option>
+            <option value="file" ${d.action==="file"?"selected":""}>Save to Files</option>
+            <option value="skip" ${d.action==="skip"?"selected":""}>Skip</option></select>
+          <button type="button" class="btn small" data-rvfill="${i}">Edit in form</button></div>
+      </div>`;
+    }).join("") +
+    `<div class="row"><button type="button" class="btn primary" id="rvCreate">Create ${RV.docs.filter(d => d.action !== "skip").length} item${RV.docs.filter(d => d.action !== "skip").length===1?"":"s"}</button><span class="muted" id="rvMsg" style="font-size:13px"></span></div>`;
+}
+$("docReview").addEventListener("change", e => { const s = e.target.closest("[data-rvact]"); if (!s) return; RV.docs[+s.dataset.rvact].action = s.value; renderReview(); });
+$("docReview").addEventListener("click", async e => {
+  const fillBtn = e.target.closest("[data-rvfill]");
+  if (fillBtn) {
+    const d = RV.docs[+fillBtn.dataset.rvfill];
+    if (d.action === "diy") { F.doneBy = "diy"; syncForm(); }
+    fillFormFrom(d); RV.docs = []; renderReview();
+    $("readMsg").textContent = "Filled in from that document. Check the fields, then save. The whole upload stays attached.";
+    return;
+  }
+  if (e.target.id === "rvCreate") createFromReview(e.target);
+});
+async function createFromReview(btn){
+  const chosen = RV.docs.filter(d => d.action !== "skip");
+  if (!chosen.length) { $("rvMsg").textContent = "Nothing selected."; return; }
+  btn.disabled = true;
+  const recs = [], files = []; let allSplit = true;
+  try {
+    for (const [n, d] of chosen.entries()) {
+      $("rvMsg").textContent = `Preparing ${n+1} of ${chosen.length}…`;
+      const src = RV.sources[(d.file || 1) - 1] || RV.sources[0];
+      let attach = { ...src.meta };
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(d.date||"") ? d.date : iso(today);
+      if (src.meta.type === "application/pdf" && Array.isArray(d.pages) && d.pages.length) {
+        try {
+          const part = await extractPages(src.blob, d.pages);
+          if (part) {
+            const name = `${date}_${slug(d.title || d.shop)}.pdf`;
+            const path = `${d.action === "file" ? "files" : "receipts"}/${date.slice(0,4)}/${date}_${Date.now().toString(36)}_${slug(d.title || d.shop)}.pdf`;
+            await putFile(path, part, `Split: ${name}`);
+            blobCache.set(path, { blob: part, url: URL.createObjectURL(part) });
+            attach = { path, name, type: "application/pdf", size: part.size };
+          }
+        } catch (err) { allSplit = false; attach.name = `${src.meta.name} (pages ${d.pages.join(", ")})`; }
+      }
+      const id = (d.action === "file" ? "f" : "u") + Date.now().toString(36) + n;
+      if (d.action === "file") {
+        files.push({ id, title: d.title || "Document", category: KIND_CAT[d.kind] || "Other", date: d.date || null,
+          notes: [d.summary, d.notes].filter(Boolean).join("\n\n"), files: [attach], related: null, added: new Date().toISOString() });
+      } else {
+        const ks = new Set(d.scheduleKeys || []);
+        const sched = S.schedule.filter(s => ks.has(s.key));
+        const items = sched.map(s => s.name).concat((d.work || []).map(String).filter(w => !sched.some(s => s.name.toLowerCase() === w.toLowerCase())));
+        recs.push({ id, date, miles: Number.isFinite(d.miles) ? d.miles : null, shop: d.shop || (d.action === "diy" ? "Self (DIY)" : "Not recorded"), location: d.location || "",
+          type: "service", cost: Number.isFinite(d.total) ? d.total : null, invoice: d.invoice || "", notes: [d.summary, d.notes].filter(Boolean).join(" "),
+          items: items.length ? items : [d.title || "See attached receipt"], tags: [...new Set(sched.flatMap(s => s.tags))], owner: 3,
+          source: "Read from receipt", doneBy: d.action === "diy" ? "diy" : "shop", hours: null,
+          parts: (d.parts || []).map(p => ({ name: String(p.name||""), partNo: p.partNo || "", qty: Number.isFinite(p.qty) ? p.qty : null, cost: Number.isFinite(p.cost) ? p.cost : null })),
+          receipts: [attach] });
+      }
+    }
+    $("rvMsg").textContent = "Saving to GitHub…";
+    await save(db => { db.records.push(...recs); db.files = db.files || []; db.files.push(...files); },
+      `Add ${recs.length} record${recs.length===1?"":"s"} and ${files.length} file${files.length===1?"":"s"} from ${RV.sources.map(s => s.meta.name).join(", ")}`.slice(0, 120));
+    if (allSplit) { for (const s of RV.sources) if (F.fresh.has(s.meta.path)) { try { await deleteFile(s.meta.path, "Remove combined upload after splitting"); } catch(err){} } }
+    F.fresh = new Set(); RV.docs = []; RV.sources = []; renderReview();
+    $("formPanel").hidden = true;
+    toast(`Added ${recs.length} record${recs.length===1?"":"s"} and ${files.length} file${files.length===1?"":"s"}`);
+  } catch (err) { $("rvMsg").textContent = err.message; btn.disabled = false; }
+}
+$("readBtn").addEventListener("click", async () => {
+  if (!CFG.akey) { $("readMsg").innerHTML = `Add your Anthropic API key in <a href="#" data-opensettings="1">Settings</a> to fill forms from receipts.`; return; }
+  const btn = $("readBtn"); btn.disabled = true; $("readMsg").textContent = "Reading… a long PDF can take a minute or two."; RV.docs = []; renderReview();
+  try {
+    const content = []; RV.sources = [];
+    for (const x of F.receipts.slice(0, 5)) {
+      const blob = F.files[x.path] || await fileBlob(x.path);
+      RV.sources.push({ meta: x, blob });
+      if ((x.type || blob.type) === "application/pdf") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: await b64FromBlob(blob) } });
+      else { const img = await normalizeImage(blob, 3.7*1024*1024); content.push({ type: "image", source: { type: "base64", media_type: img.type, data: await b64FromBlob(img) } }); }
+    }
+    const keys = S.schedule.map(s => `${s.key}: ${s.name}`).join("\n");
+    content.push({ type: "text", text: `The attached file(s) are paperwork for a 2013 Ford F-350 6.7L Power Stroke diesel. A single PDF may hold several separate documents: shop invoices or work orders, parts-store receipts, diagnostic scan reports, shop recommendation sheets, wiring or repair printouts, flyers, or blank pages.
+List every separate document. "file" is which attachment it is in (1-based, in the order attached) and "pages" are its page numbers within that file (1-based; an image is page 1).
+kind: "service" = work a shop performed (invoice/work order); "parts_receipt" = parts bought, likely installed by the owner; "diagnostic" = scan or test report; "recommendation" = suggested services or an estimate, not performed; "reference" = wiring diagrams, specs, procedures; "marketing" = ads or flyers; "blank" = empty or back side of a page; "other".
+Extract only what is printed; use null when something isn't there. Odometer readings can be wrong on paperwork; still report what is printed.
+Reply with only JSON:
+{"documents":[{"file":number,"pages":[numbers],"kind":string,"title":"short title, e.g. 'A1 Speedomotive repair invoice 065262'","date":"YYYY-MM-DD"|null,"miles":number|null,"shop":string|null,"location":"City, ST"|null,"invoice":string|null,"total":number|null,
+"work":[short strings for work performed or items bought],"parts":[{"name":string,"partNo":string|null,"qty":number|null,"cost":number|null}],
+"scheduleKeys":[keys from the list below that this document shows were done],"summary":"one or two sentences on what it says (for scans: the codes; for recommendations: what was recommended)","notes":string|null}]}
+Schedule keys:
+${keys}` });
+    const j = await callClaude(content, 8000);
+    const docs = Array.isArray(j.documents) ? j.documents : [j];
+    docs.forEach(d => { d.action = defaultAction(d); });
+    const useful = docs.filter(d => d.kind !== "blank" && d.kind !== "marketing");
+    if (useful.length <= 1 && (useful[0] || docs[0])) {
+      fillFormFrom(useful[0] || docs[0]);
+      const dup = findDuplicate(useful[0] || docs[0]);
+      $("readMsg").textContent = dup ? `Filled in, but this looks like it's already in your history (${fmtD(parseD(dup.date))} · ${dup.shop}). Close instead of saving if it's the same visit.` : "Filled in from the receipt. Check the fields, then save.";
+    } else {
+      RV.docs = docs; renderReview();
+      $("readMsg").textContent = "";
+    }
+  } catch (e) {
+    $("readMsg").textContent = e instanceof SyntaxError ? "Couldn't make sense of that file. Fill the form by hand." : (e.message || "Couldn't read the receipt. Fill the form by hand.");
+  } finally { btn.disabled = false; }
+});
+
 /* ---------- settings ---------- */
 function openSettings(){
   $("sOwner").value = CFG.owner || "scottmcconnell1-bot";
@@ -1073,7 +1366,7 @@ $("sTestKey").addEventListener("click", async () => {
 
 $("signOut").addEventListener("click", () => {
   try { localStorage.removeItem(CFG_KEY); localStorage.removeItem(CACHE_KEY); } catch(e){}
-  CFG = {}; DB = null; SHA = null; S.records = []; S.schedule = []; S.odometer = []; S.vehicle = null; S.canWrite = false;
+  CFG = {}; DB = null; SHA = null; S.records = []; S.files = []; S.schedule = []; S.odometer = []; S.vehicle = null; S.canWrite = false;
   $("settings").hidden = true; render(); showSetup(); toast("Signed out on this device");
 });
 function showSetup(){
